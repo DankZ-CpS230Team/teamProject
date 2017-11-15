@@ -115,6 +115,48 @@ _taskA:
 _taskB:
 	;
 
+_printChar:
+	; bx is location, bl is x, bh is y
+	; cx is color, ch is foreground, cl is background
+	; dh is blink
+	; dl is ascii value
+	push	bx
+	push	cx
+	push	dx
+
+	mov		ax, 0xB800 ; where the graphics start in memory
+	mov		es, ax
+	mov		al, bh ; do the math to find the character offset
+	mov		ah, 80
+	mul		ah
+	push	dx
+	xor		dx, dx
+	mov		dl, bl
+	add		ax, dx
+	pop		dx
+	mov		bx, ax; offset to move the char to a location on the screen (y * 80) + x
+	; bx now holds the right offset
+
+	mov		ax, dx
+	
+	; shift dh 15
+	shl		dh, 15
+	; shift cl 12
+	; shift ch 8
+	; shift dl 0
+	
+
+	mov		ah, 0x0
+	mov		al, 0x3
+	int		0x10 ; set video to text mode
+
+	mov		word [es:bx], 0x9F42 ; B dark blue background, white font
+
+	pop		dx
+	pop		cx
+	pop		bx
+	ret	; return to caller
+
 ; print NULL-terminated string from DS:DX to screen using BIOS (INT 0x10)
 ; takes NULL-terminated string pointed to by DS:DX
 ; prints to row, col stored in BH, BL (respectively)
