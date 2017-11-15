@@ -120,6 +120,7 @@ _printChar:
 	; cx is color, ch is foreground, cl is background
 	; dh is blink
 	; dl is ascii value
+	push	ax
 	push	bx
 	push	cx
 	push	dx
@@ -137,24 +138,35 @@ _printChar:
 	mov		bx, ax; offset to move the char to a location on the screen (y * 80) + x
 	; bx now holds the right offset
 
-	mov		ax, dx
-	
-	; shift dh 15
-	shl		dh, 15
-	; shift cl 12
-	; shift ch 8
-	; shift dl 0
-	
+	; move blink into position
+	mov		al, dh
+	shl		ax, 3
+	; move background into position
+	and		cl, 0x7
+	and		al, cl
+	shl		ax, 4
+	; move foreground into position
+	and		ch, 0xf
+	and		al,	ch
+	shl		ax, 8
+	; move ascii char into position
+	and		al, dl
+
+	; move ax into dx, because ax is used for arguments to the video mode
+	mov		dx, ax
 
 	mov		ah, 0x0
 	mov		al, 0x3
-	int		0x10 ; set video to text mode
+	int		0x10 ; set video mode
 
-	mov		word [es:bx], 0x9F42 ; B dark blue background, white font
+	mov		word [es:bx], ax ; print the character (with formatting) stored in ax in the location stored in bx
 
 	pop		dx
 	pop		cx
 	pop		bx
+	pop		ax
+	; inc bl for printing next charachter
+	inc		bl
 	ret	; return to caller
 
 ; print NULL-terminated string from DS:DX to screen using BIOS (INT 0x10)
@@ -202,6 +214,19 @@ infiniteLoop_main:
 	mov		bh, 24
 	mov		bl, 32
 	call	_printString
+	; test _printChar
+	mov		bl, 10 ; y = 10
+	mov		bh, 10 ; x = 10
+	mov		cl, 0 ; black background
+	mov		ch, 9 ; light blue foreground
+	mov		dl, 65 ; ascii for 'A'
+	mov		dh, 0 ; no blink
+	call	_printChar
+
+	; wait for a keypress so the user can see what happened
+	mov ah, 0x0
+	int 0x16
+
 	; call	_yield
 	; jmp		infiniteLoop_main
 	
