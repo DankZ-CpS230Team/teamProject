@@ -2,5 +2,5 @@ Bugs:
 	(fill out later, there are lots right now)
 	
 Time spent:
-	Zachary Hayes: 1.75 hr.
-	Ryan Longacre: 1.5 hrs.
+	Zachary Hayes: 2.0 hr.
+	Ryan Longacre: 2.5 hrs.

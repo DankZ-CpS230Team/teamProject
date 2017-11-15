@@ -143,14 +143,14 @@ _printChar:
 	shl		ax, 3
 	; move background into position
 	and		cl, 0x7
-	and		al, cl
+	or		al, cl
 	shl		ax, 4
 	; move foreground into position
 	and		ch, 0xf
-	and		al,	ch
+	or		al,	ch
 	shl		ax, 8
 	; move ascii char into position
-	and		al, dl
+	or		al, dl
 
 	; move ax into dx, because ax is used for arguments to the video mode
 	mov		dx, ax
@@ -159,7 +159,7 @@ _printChar:
 	mov		al, 0x3
 	int		0x10 ; set video mode
 
-	mov		word [es:bx], ax ; print the character (with formatting) stored in ax in the location stored in bx
+	mov		word [es:bx], dx ; print the character (with formatting) stored in ax in the location stored in bx
 
 	pop		dx
 	pop		cx
