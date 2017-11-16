@@ -107,14 +107,76 @@ y_task_available:
 	popa
 	ret
 
-; Prints "I am task A" to screen
+; Prints "Task A" to screen
 _taskA:
-	;
+	mov		ax, 0
+	mov		bl, 2
+jumpA_begin:
+	; print "Task A" in light blue
+	mov		bh, 12
+	mov		cl, 0 ; black background
+	mov		ch, 9 ; light blue foreground
+	mov		dl, 84 ; ascii for 'T'
+	mov		dh, 0 ; no blink
+	call	_printChar
+	mov		dl, 97 ; ascii for 'a'
+	call	_printChar
+	mov		dl, 115 ; ascii for 's'
+	call	_printChar
+	mov		dl, 107 ; ascii for 'k'
+	call	_printChar
+	mov		dl, 32 ; ascii for ' '
+	call	_printChar
+	mov		dl, 65 ; ascii for 'A'
+	call	_printChar
+	inc		ax
+	cmp		word [slow_clock], 0
+	jne		yield_A
+	cmp		word [fast_clock], 0
+	jne		yield_A
+	cmp		word [frame_clock], 0
+	je		inc_x_A
+yield_A:
+	call	_yield
+	jmp		jumpA_begin
+inc_x_A:
+	sub		bl, 10
+	jmp		yield_A
+	
 
 ; Prints "I am task B" to screen
 _taskB:
-	;
+jumpB_begin:
+	; print "Task B" in light purple
+	mov		bl, 2
+	mov		bh, 20
+	mov		cl, 0 ; black background
+	mov		ch, 0xd ; light purple foreground
+	mov		dl, 84 ; ascii for 'T'
+	mov		dh, 0 ; no blink
+	call	_printChar
+	mov		dl, 97 ; ascii for 'a'
+	call	_printChar
+	mov		dl, 115 ; ascii for 's'
+	call	_printChar
+	mov		dl, 107 ; ascii for 'k'
+	call	_printChar
+	mov		dl, 32 ; ascii for ' '
+	call	_printChar
+	mov		dl, 66 ; ascii for 'B'
+	call	_printChar
+	call	_yield
+	jmp		jumpB_begin
 
+; prints a char to the screen using 0x10 interrupt
+; bl and bh are thee coordinates of where the char gets printed
+; cl is the background color, ch is the foreground color
+; dh is whether or not the charachter blinks
+; dl is the ascii value of the character to be printed
+; video mode must already be set, or else it erases everything
+; prints  char to row, col stored in BH, BL (respectively)
+; clobbers nothing
+; returns nothing
 _printChar:
 	; bx is location, bl is x, bh is y
 	; cx is color, ch is foreground, cl is background
@@ -128,8 +190,8 @@ _printChar:
 	mov		ax, 0xB800 ; where the graphics start in memory
 	mov		es, ax
 	mov		al, bh ; do the math to find the character offset
-	mov		ah, 80
-	mul		ah
+	mov		ax, 80
+	mul		bh
 	push	dx
 	xor		dx, dx
 	mov		dl, bl
@@ -155,18 +217,14 @@ _printChar:
 	; move ax into dx, because ax is used for arguments to the video mode
 	mov		dx, ax
 
-	mov		ah, 0x0
-	mov		al, 0x3
-	int		0x10 ; set video mode
-
 	mov		word [es:bx], dx ; print the character (with formatting) stored in ax in the location stored in bx
 
 	pop		dx
 	pop		cx
 	pop		bx
 	pop		ax
-	; inc bl for printing next charachter
-	inc		bl
+	inc		bl ; add one to the x, so the next char can be printed right next to it
+	inc		bl	
 	ret	; return to caller
 
 ; print NULL-terminated string from DS:DX to screen using BIOS (INT 0x10)
@@ -209,26 +267,38 @@ _main:
 	mov		dx, _taskB
 	call	_spawn_new_task
 infiniteLoop_main:
-	; print "Main" in center of screen
-	mov		dx, main_str
-	mov		bh, 24
-	mov		bl, 32
-	call	_printString
-	; test _printChar
-	mov		bl, 10 ; y = 10
-	mov		bh, 10 ; x = 10
+	; set video mode
+	mov		ah, 0x0
+	mov		al, 0x3
+	int		0x10 
+
+	; increment the clocks
+	inc word [fast_clock]
+	cmp word [fast_clock], 0
+	je no_inc
+	inc word [slow_clock]
+	cmp word [slow_clock], 0
+	je	no_inc
+	inc word [frame_clock]
+no_inc:
+	
+	; print "Main" in white
+	mov		bl, 2
+	mov		bh, 4
 	mov		cl, 0 ; black background
-	mov		ch, 9 ; light blue foreground
-	mov		dl, 65 ; ascii for 'A'
+	mov		ch, 7 ; white foreground
+	mov		dl, 77 ; ascii for 'M'
 	mov		dh, 0 ; no blink
 	call	_printChar
+	mov		dl, 97 ; ascii for 'a'
+	call	_printChar
+	mov		dl, 105 ; ascii for 'i'
+	call	_printChar
+	mov		dl, 110 ; ascii for 'n'
+	call	_printChar
 
-	; wait for a keypress so the user can see what happened
-	mov ah, 0x0
-	int 0x16
-
-	; call	_yield
-	; jmp		infiniteLoop_main
+	call	_yield
+	jmp		infiniteLoop_main
 	
 	mov	ah, 0x4c
 	mov	al, 0
@@ -239,6 +309,10 @@ SECTION .data
 	main_str: db "Main", 0
 	taskA_str: db "I am task A", 0
 	taskB_str: db "I am task B", 0
+
+	fast_clock: dd 1
+	slow_clock: dd 1
+	frame_clock: dd 1
 
 	; global variables for stacks
 	current_task: db 0
