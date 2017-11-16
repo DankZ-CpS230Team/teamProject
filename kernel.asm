@@ -109,8 +109,8 @@ y_task_available:
 
 ; Prints "Task A" to screen
 _taskA:
-	mov		ax, 0
 	mov		bl, 2
+	sub		sp, 1 ; reserve local boolean variable to signal whether to move or not
 jumpA_begin:
 	; print "Task A" in light blue
 	mov		bh, 12
@@ -129,26 +129,35 @@ jumpA_begin:
 	call	_printChar
 	mov		dl, 65 ; ascii for 'A'
 	call	_printChar
-	inc		ax
-	cmp		word [slow_clock], 0
-	jne		yield_A
-	cmp		word [fast_clock], 0
-	jne		yield_A
-	cmp		word [frame_clock], 0
-	je		inc_x_A
+	mov		ah, 0x2c
+	int		0x21
+	; mov		ax, 0
+	; mov		al, dl
+	; mov		dx, 2
+	; idiv		dx
+	cmp		dl, 0
+	jne		no_inc_A
+	cmp		byte [bp + 1], 0
+	jne		inc_x_A
+	jmp		yield_A
+no_inc_A:
+	mov		byte [bp + 1], 1
+	sub		bl, 12
 yield_A:
 	call	_yield
 	jmp		jumpA_begin
 inc_x_A:
+	mov		byte [bp + 1], 0
 	sub		bl, 10
 	jmp		yield_A
 	
 
 ; Prints "I am task B" to screen
 _taskB:
+	mov		bl, 2
+	sub		sp, 1 ; reserve local boolean variable to signal whether to move or not
 jumpB_begin:
 	; print "Task B" in light purple
-	mov		bl, 2
 	mov		bh, 20
 	mov		cl, 0 ; black background
 	mov		ch, 0xd ; light purple foreground
@@ -165,8 +174,27 @@ jumpB_begin:
 	call	_printChar
 	mov		dl, 66 ; ascii for 'B'
 	call	_printChar
+	mov		ah, 0x2c
+	int		0x21
+	; mov		ax, 0
+	; mov		al, dl
+	; mov		dx, 2
+	; idiv		dx
+	cmp		dl, 0
+	jne		no_inc_B
+	cmp		byte [bp + 1], 0
+	jne		inc_x_B
+	jmp		yield_B
+no_inc_B:
+	mov		byte [bp + 1], 1
+	sub		bl, 12
+yield_B:
 	call	_yield
 	jmp		jumpB_begin
+inc_x_B:
+	mov		byte [bp + 1], 0
+	sub		bl, 14
+	jmp		yield_B
 
 ; prints a char to the screen using 0x10 interrupt
 ; bl and bh are thee coordinates of where the char gets printed
@@ -273,13 +301,13 @@ infiniteLoop_main:
 	int		0x10 
 
 	; increment the clocks
-	inc word [fast_clock]
-	cmp word [fast_clock], 0
-	je no_inc
-	inc word [slow_clock]
-	cmp word [slow_clock], 0
-	je	no_inc
-	inc word [frame_clock]
+	; inc word [fast_clock]
+	; cmp word [fast_clock], 0
+	; je no_inc
+	; inc word [slow_clock]
+	; cmp word [slow_clock], 0
+	; je	no_inc
+	; inc word [frame_clock]
 no_inc:
 	
 	; print "Main" in white
