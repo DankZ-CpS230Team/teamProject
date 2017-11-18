@@ -116,29 +116,20 @@ jumpA_begin:
 	mov		bh, 12
 	mov		cl, 0 ; black background
 	mov		ch, 9 ; light blue foreground
-	mov		dl, 84 ; ascii for 'T'
+	mov		ax, taskA_str ; pointer to string
 	mov		dh, 0 ; no blink
-	call	_printChar
-	mov		dl, 97 ; ascii for 'a'
-	call	_printChar
-	mov		dl, 115 ; ascii for 's'
-	call	_printChar
-	mov		dl, 107 ; ascii for 'k'
-	call	_printChar
-	mov		dl, 32 ; ascii for ' '
-	call	_printChar
-	mov		dl, 65 ; ascii for 'A'
-	call	_printChar
+	call	_printString
 	mov		ah, 0x2c
 	int		0x21
 	; mov		ax, 0
 	; mov		al, dl
 	; mov		dx, 2
 	; idiv		dx
-	cmp		dl, 0
-	jne		no_inc_A
-	cmp		byte [bp + 1], 0
-	jne		inc_x_A
+
+	; cmp		dl, 0
+	; jne		no_inc_A
+	; cmp		byte [bp + 1], 0
+	; jne		inc_x_A
 	jmp		yield_A
 no_inc_A:
 	mov		byte [bp + 1], 1
@@ -161,29 +152,20 @@ jumpB_begin:
 	mov		bh, 20
 	mov		cl, 0 ; black background
 	mov		ch, 0xd ; light purple foreground
-	mov		dl, 84 ; ascii for 'T'
+	mov		ax, taskB_str ; pointer to string
 	mov		dh, 0 ; no blink
-	call	_printChar
-	mov		dl, 97 ; ascii for 'a'
-	call	_printChar
-	mov		dl, 115 ; ascii for 's'
-	call	_printChar
-	mov		dl, 107 ; ascii for 'k'
-	call	_printChar
-	mov		dl, 32 ; ascii for ' '
-	call	_printChar
-	mov		dl, 66 ; ascii for 'B'
-	call	_printChar
+	call	_printString
 	mov		ah, 0x2c
 	int		0x21
 	; mov		ax, 0
 	; mov		al, dl
 	; mov		dx, 2
 	; idiv		dx
-	cmp		dl, 0
-	jne		no_inc_B
-	cmp		byte [bp + 1], 0
-	jne		inc_x_B
+
+	; cmp		dl, 0
+	; jne		no_inc_B
+	; cmp		byte [bp + 1], 0
+	; jne		inc_x_B
 	jmp		yield_B
 no_inc_B:
 	mov		byte [bp + 1], 1
@@ -256,35 +238,42 @@ _printChar:
 	ret	; return to caller
 
 ; print NULL-terminated string from DS:DX to screen using BIOS (INT 0x10)
-; takes NULL-terminated string pointed to by DS:DX
+; takes NULL-terminated string pointed to by DS:AX
 ; prints to row, col stored in BH, BL (respectively)
 ; clobbers nothing
 ; returns nothing
 _printString:
-	push	ax		; save ax/cx/si
+	push	ax	; save registers
+	push	bx
 	push	cx
+	push	dx
 	push	si
 	
-	; set cursor to row BH, col BL
-	push	dx ; save string pointer since we need dh, dl to move position
-	mov		ah, 0x2
-	mov		dh, bh
-	mov		dl, bl
-	int		0x10
-	pop		dx
+	mov		si, ax
 	
-	mov		ah, 0x0e	; BIOS video services (int 0x10) function 0x0e: put char to screen
-	
-	mov		si, dx		; SI = pointer to string (offset only; segment assumed to be DS)
-.loop: mov		al, [si]	; AL = current character
+	mov		al, bl ; store beginning of line col for new line jumps 
+
+.loop:
+	mov		dl, [si]	; AL = current character
 	inc		si			; advance SI to point at next character
-	cmp		al, 0		; if (AL == 0), stop
+	cmp		dl, 0		; if (AL == 0), stop
 	jz		.end
-	int		0x10		; call BIOS via interrupt 0x10 (the ASCII char to print is in AL)
+	cmp		dl,	10		; if newline, jump down a line and back to the beginning col
+	je		.new
+	jmp		.not_new	
+.new:
+	mov		bl, al		; jump back to the original col
+	inc		bh
+	inc		bh			; increment one col
+	jmp		.loop		; don't print the character, it looks weeeeeeeeird
+.not_new:
+	call	_printChar	; use _printChar to print the char
 	jmp		.loop		; repeat
 .end:
-	pop		si ; restore si/cx/ax (de-clobber)
+	pop		si ; restore registers (de-clobber)
+	pop		dx	
 	pop		cx
+	pop		bx
 	pop		ax
 	ret		; return to caller
 	
@@ -311,19 +300,13 @@ infiniteLoop_main:
 no_inc:
 	
 	; print "Main" in white
-	mov		bl, 2
-	mov		bh, 4
+	mov		bl, 2 ; col 2
+	mov		bh, 4 ; row 4
 	mov		cl, 0 ; black background
 	mov		ch, 7 ; white foreground
-	mov		dl, 77 ; ascii for 'M'
 	mov		dh, 0 ; no blink
-	call	_printChar
-	mov		dl, 97 ; ascii for 'a'
-	call	_printChar
-	mov		dl, 105 ; ascii for 'i'
-	call	_printChar
-	mov		dl, 110 ; ascii for 'n'
-	call	_printChar
+	mov		ax, main_str
+	call	_printString
 
 	call	_yield
 	jmp		infiniteLoop_main
@@ -336,7 +319,7 @@ SECTION .data
 	; global variables
 	main_str: db "Main", 0
 	taskA_str: db "I am task A", 0
-	taskB_str: db "I am task B", 0
+	taskB_str: db "I am", 10, "task B", 0
 
 	fast_clock: dd 1
 	slow_clock: dd 1

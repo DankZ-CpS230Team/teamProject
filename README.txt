@@ -4,5 +4,5 @@ Bugs:
 	- Scroll period is longer than 1 second and seems to vary
 	
 Time spent:
-	Zachary Hayes: 3.5 hr.
-	Ryan Longacre: 4.5 hrs.
+	Zachary Hayes: 3.5 hrs.
+	Ryan Longacre: 5.0 hrs.
