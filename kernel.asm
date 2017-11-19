@@ -7,7 +7,15 @@ org 0x100
 
 SECTION .text
 
-start: jmp _main
+start:
+	; spawn tasks
+	mov		dx, _main
+	call	_spawn_new_task
+	mov		dx, _taskA
+	call	_spawn_new_task
+	mov		dx, _taskB
+	call	_spawn_new_task
+	jmp _main
 
 ; spawns new task
 ; dx should contain the address of the function to run
@@ -110,7 +118,8 @@ y_task_available:
 ; Prints "Task A" to screen
 _taskA:
 	mov		bl, 2
-	sub		sp, 1 ; reserve local boolean variable to signal whether to move or not
+	sub		sp, 1 ; reserve space for local boolean to track direction (0 - left, 1 - right)
+	mov		byte [bp + 1], 1
 jumpA_begin:
 	; print "Task A" in light blue
 	mov		bh, 12
@@ -129,33 +138,36 @@ jumpA_begin:
 	call	_printChar
 	mov		dl, 65 ; ascii for 'A'
 	call	_printChar
-	mov		ah, 0x2c
-	int		0x21
-	; mov		ax, 0
-	; mov		al, dl
-	; mov		dx, 2
-	; idiv		dx
-	cmp		dl, 0
-	jne		no_inc_A
-	cmp		byte [bp + 1], 0
-	jne		inc_x_A
+		
+	; increment column for next print and yield
+	cmp		bl, 160
+	jae		changeDir_A
+	cmp		bl, 12
+	jbe		changeDir_A
+	cmp		byte [bp + 1], 1 ; check direction flag
+	je		moveRight_A
+; move left
+	sub		bl, 14
 	jmp		yield_A
-no_inc_A:
-	mov		byte [bp + 1], 1
-	sub		bl, 12
+moveRight_A:
+	sub		bl, 10
+	jmp		yield_A
+changeDir_A:
+	mov		al, 4 ; these next 4 lines evaluate to bh -= ((dir == 1) ? 14 : 10)
+	imul	byte [bp + 1]
+	add		al, 10
+	sub		bl, al
+	xor		byte [bp + 1], 1 ; flip direction flag
+	
 yield_A:
 	call	_yield
 	jmp		jumpA_begin
-inc_x_A:
-	mov		byte [bp + 1], 0
-	sub		bl, 10
-	jmp		yield_A
-	
 
 ; Prints "I am task B" to screen
 _taskB:
-	mov		bl, 2
-	sub		sp, 1 ; reserve local boolean variable to signal whether to move or not
+	mov		bl, 146
+	sub		sp, 1 ; reserve space for local boolean to track direction (0 - left, 1 - right)
+	mov		byte [bp + 2], 0
 jumpB_begin:
 	; print "Task B" in light purple
 	mov		bh, 20
@@ -174,27 +186,30 @@ jumpB_begin:
 	call	_printChar
 	mov		dl, 66 ; ascii for 'B'
 	call	_printChar
-	mov		ah, 0x2c
-	int		0x21
-	; mov		ax, 0
-	; mov		al, dl
-	; mov		dx, 2
-	; idiv		dx
-	cmp		dl, 0
-	jne		no_inc_B
-	cmp		byte [bp + 1], 0
-	jne		inc_x_B
+	
+	; increment column for next print and yield
+	cmp		bl, 160
+	jae		changeDir_B
+	cmp		bl, 12
+	jbe		changeDir_B
+	cmp		byte [bp + 2], 1 ; check direction flag
+	je		moveRight_B
+; move left
+	sub		bl, 14
 	jmp		yield_B
-no_inc_B:
-	mov		byte [bp + 1], 1
-	sub		bl, 12
+moveRight_B:
+	sub		bl, 10
+	jmp		yield_B
+changeDir_B:
+	mov		al, 4 ; these next 4 lines evaluate to bh -= ((dir == 1) ? 14 : 10)
+	imul	byte [bp + 2]
+	add		al, 10
+	sub		bl, al
+	xor		byte [bp + 2], 1 ; flip direction flag
+	
 yield_B:
 	call	_yield
 	jmp		jumpB_begin
-inc_x_B:
-	mov		byte [bp + 1], 0
-	sub		bl, 14
-	jmp		yield_B
 
 ; prints a char to the screen using 0x10 interrupt
 ; bl and bh are thee coordinates of where the char gets printed
@@ -288,26 +303,15 @@ _printString:
 	pop		ax
 	ret		; return to caller
 	
-_main:
-	; spawn other tasks, then print "Main" in loop until interrupted
-	mov		dx, _taskA
-	call	_spawn_new_task
-	mov		dx, _taskB
-	call	_spawn_new_task
+; print "Main" in loop until interrupted
+_main:	
+	
 infiniteLoop_main:
 	; set video mode
 	mov		ah, 0x0
 	mov		al, 0x3
 	int		0x10 
 
-	; increment the clocks
-	; inc word [fast_clock]
-	; cmp word [fast_clock], 0
-	; je no_inc
-	; inc word [slow_clock]
-	; cmp word [slow_clock], 0
-	; je	no_inc
-	; inc word [frame_clock]
 no_inc:
 	
 	; print "Main" in white
@@ -326,8 +330,14 @@ no_inc:
 	call	_printChar
 
 	call	_yield
+	; pause after drawing updates
+	mov		ah, 0x86
+	mov		cx, 0
+	mov		dx, 0xFFFF
+	int		0x15
+
 	jmp		infiniteLoop_main
-	
+
 	mov	ah, 0x4c
 	mov	al, 0
 	int	0x21
@@ -337,10 +347,6 @@ SECTION .data
 	main_str: db "Main", 0
 	taskA_str: db "I am task A", 0
 	taskB_str: db "I am task B", 0
-
-	fast_clock: dd 1
-	slow_clock: dd 1
-	frame_clock: dd 1
 
 	; global variables for stacks
 	current_task: db 0
