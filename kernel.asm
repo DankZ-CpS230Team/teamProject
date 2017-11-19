@@ -258,15 +258,20 @@ _printString:
 	inc		si			; advance SI to point at next character
 	cmp		dl, 0		; if (AL == 0), stop
 	jz		.end
-	cmp		dl,	10		; if newline, jump down a line and back to the beginning col
+	cmp		dl,	10		; if newline, jump back to the beginning col
 	je		.new
-	jmp		.not_new	
+	cmp		dl, 13		; if carriage return, jump down a row
+	je		.ret
+	jmp		.check_offscreen	
 .new:
 	mov		bl, al		; jump back to the original col
+	jmp		.loop		; don't print the character
+.ret:
 	inc		bh
-	inc		bh			; increment one col
-	jmp		.loop		; don't print the character, it looks weeeeeeeeird
-.not_new:
+	inc		bh			; increment one row
+	jmp		.loop		; don't print the character
+.check_offscreen:		; TODO: check if ofscreen
+.print:
 	call	_printChar	; use _printChar to print the char
 	jmp		.loop		; repeat
 .end:
@@ -319,7 +324,7 @@ SECTION .data
 	; global variables
 	main_str: db "Main", 0
 	taskA_str: db "I am task A", 0
-	taskB_str: db "I am", 10, "task B", 0
+	taskB_str: db "I am", 13, 10, "task B", 0
 
 	fast_clock: dd 1
 	slow_clock: dd 1
