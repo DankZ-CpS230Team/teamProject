@@ -286,7 +286,11 @@ _printString:
 	inc		bh
 	inc		bh			; increment one row
 	jmp		.loop		; don't print the character
-.check_offscreen:		; TODO: check if ofscreen
+.check_offscreen:		; check if offscreen row or column
+	cmp		bl, 160
+	jae		.loop
+	cmp		bh, 50
+	jae		.end
 .print:
 	call	_printChar	; use _printChar to print the char
 	jmp		.loop		; repeat
