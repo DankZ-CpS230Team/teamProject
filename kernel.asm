@@ -3,11 +3,13 @@
 
 bits 16
 
-org 0x100
+org 0x0 ; change to 0x100 when running as COM file, change to 0x0 when bootinjg with bootloader
 
 SECTION .text
 
 start:
+	mov		dx, cs
+	mov		ds, dx
 	; spawn tasks
 	mov		dx, _main
 	call	_spawn_new_task
@@ -34,7 +36,7 @@ sp_loop_for_available_stack:
 	jne sp_check_for_overflow
 	jmp sp_no_available_stack
 sp_check_for_overflow:
-	cmp cl, 31
+	cmp cl, 6
 	jg sp_reset
 	jmp sp_check_if_available
 sp_reset:
@@ -88,7 +90,7 @@ _yield:
 	mov cl, [current_task]
 	inc cl
 y_check_for_overflow:
-	cmp cl, 31
+	cmp cl, 6
 	jg y_reset
 	jmp y_check_if_enabled
 y_reset:
@@ -337,8 +339,8 @@ SECTION .data
 
 	; global variables for stacks
 	current_task: db 0
-	stacks: times (256 * 31) db 0 ; 31 fake stacks of size 256 bytes
-	task_status: times 32 db 0 ; 0 means inactive, 1 means active
+	stacks: times (256 * 6) db 0 ; 5 fake stacks of size 256 bytes
+	task_status: times 6 db 0 ; 0 means inactive, 1 means active
 	stack_pointers: dw 0 ; the first pointer needs to be to the real stack !
 					dw stacks + (256 * 1)
 					dw stacks + (256 * 2)
@@ -347,28 +349,3 @@ SECTION .data
 					dw stacks + (256 * 5)
 					dw stacks + (256 * 6)
 					dw stacks + (256 * 7)
-					dw stacks + (256 * 8)
-					dw stacks + (256 * 9)
-					dw stacks + (256 * 10)
-					dw stacks + (256 * 11)
-					dw stacks + (256 * 12)
-					dw stacks + (256 * 13)
-					dw stacks + (256 * 14)
-					dw stacks + (256 * 15)
-					dw stacks + (256 * 16)
-					dw stacks + (256 * 17)
-					dw stacks + (256 * 18)
-					dw stacks + (256 * 19)
-					dw stacks + (256 * 20)
-					dw stacks + (256 * 21)
-					dw stacks + (256 * 22)
-					dw stacks + (256 * 23)
-					dw stacks + (256 * 24)
-					dw stacks + (256 * 25)
-					dw stacks + (256 * 26)
-					dw stacks + (256 * 27)
-					dw stacks + (256 * 28)
-					dw stacks + (256 * 29)
-					dw stacks + (256 * 30)
-					dw stacks + (256 * 31)
-	
