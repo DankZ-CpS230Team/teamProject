@@ -3,7 +3,7 @@
 
 bits 16
 
-org 0x0 ; change to 0x100 when running as COM file, change to 0x0 when bootinjg with bootloader
+org 0x0 ; change to 0x100 when running as COM file, change to 0x0 when booting with bootloader
 
 SECTION .text
 
