@@ -3,7 +3,7 @@
 
 bits 16
 
-org 0x0 ; change to 0x100 when running as COM file, change to 0x0 when booting with bootloader
+org 0x100 ; change to 0x100 when running as COM file, change to 0x0 when booting with bootloader
 
 SECTION .text
 
@@ -119,12 +119,12 @@ y_task_available:
 
 ; Prints "Task A" to screen
 _taskA:
-	mov		bl, 2
+	mov		bl, 44
 	sub		sp, 1 ; reserve space for local boolean to track direction (0 - left, 1 - right)
 	mov		byte [bp + 1], 1
 jumpA_begin:
 	; print "Task A" in light blue
-	mov		bh, 12
+	mov		bh, 34
 	mov		cl, 0 ; black background
 	mov		ch, 9 ; light blue foreground
 	mov		ax, taskA_str ; pointer to string
@@ -134,7 +134,7 @@ jumpA_begin:
 	; increment column for next print and yield
 	cmp		bl, 160 - 22 ; 22 is length of string
 	jae		changeDir_A
-	cmp		bl, 0
+	cmp		bl, 42
 	jbe		changeDir_A
 	cmp		byte [bp + 1], 1 ; check direction flag
 	je		moveRight_A
@@ -162,7 +162,7 @@ _taskB:
 	mov		byte [bp + 2], 0
 jumpB_begin:
 	; print "Task B" in light purple
-	mov		bh, 20
+	mov		bh, 40
 	mov		cl, 0 ; black background
 	mov		ch, 0xd ; light purple foreground
 	mov		ax, taskB_str ; pointer to string
@@ -173,7 +173,7 @@ jumpB_begin:
 	; increment column for next print and yield
 	cmp		bl, 160 - 12 ; again, 12 is length of string's longest line
 	jae		changeDir_B
-	cmp		bl, 0
+	cmp		bl, 42
 	jbe		changeDir_B
 	cmp		byte [bp + 2], 1 ; check direction flag
 	je		moveRight_B
@@ -309,9 +309,35 @@ infiniteLoop_main:
 	; set video mode
 	mov		ah, 0x0
 	mov		al, 0x3
-	int		0x10 
-
-no_inc:
+	int		0x10
+	
+	; print headers/borders for other tasks
+	mov		bl, 0
+	mov		bh, 0
+	mov		cl, 7
+	mov		ch, 0
+	mov		dh, 0
+	mov		ax, rpn_header
+	call	_printString
+	
+	mov		bl, 0
+	mov		bh, 26
+	mov		ax, gameOfLife_header
+	call	_printString
+	
+	mov		bl, 40
+	mov		bh, 30
+	mov		ch, 7
+	mov		ax, gameOfLife_rightBorder
+	call	_printString
+	
+	mov		bl, 0
+	mov		bh, 30
+	mov		cl, 0
+	mov		ch, 7
+	mov		dh, 0
+	mov		ax, gameOfLife_grid
+	call	_printString
 	
 	; print "Main" in white
 	mov		bl, 2 ; col 2
@@ -338,6 +364,13 @@ no_inc:
 SECTION .data
 	; global variables
 	main_str: db "Main", 0
+	rpn_header: db "   RPN Calculator                                                               ", 0
+	gameOfLife_header:	db "   John Conway's                                                                ", 13, 10
+						db "  The Game of Life                           Graphics                           ", 0
+	gameOfLife_grid: times 10 db ". . . . . . . . . .", 13, 10
+					 db 0
+	gameOfLife_rightBorder: times 10 db " ", 13, 10
+							db 0
 	taskA_str: db "I am task A", 0
 	taskB_str: db "I am", 13, 10, "task B", 0
 
