@@ -312,16 +312,31 @@ infiniteLoop_main:
 	int		0x10
 	
 	; print headers/borders for other tasks
+	mov		bl, 0 ; col
+	mov		bh, 0 ; row
+	mov		cl, 7 ; background
+	mov		ch, 4 ; foreground
+	mov		dh, 0 ; blink
+	mov		ax, exit_header
+	call	_printString
+	
 	mov		bl, 0
-	mov		bh, 0
+	mov		bh, 2
 	mov		cl, 7
 	mov		ch, 0
 	mov		dh, 0
 	mov		ax, rpn_header
 	call	_printString
 	
+	mov		bl, 108
+	mov		bh, 4
+	mov		ch, 7
+	mov		ax, rpn_rightBorder
+	call	_printString
+	
 	mov		bl, 0
 	mov		bh, 26
+	mov		ch, 0
 	mov		ax, gameOfLife_header
 	call	_printString
 	
@@ -337,15 +352,6 @@ infiniteLoop_main:
 	mov		ch, 7
 	mov		dh, 0
 	mov		ax, gameOfLife_grid
-	call	_printString
-	
-	; print "Main" in white
-	mov		bl, 2 ; col 2
-	mov		bh, 4 ; row 4
-	mov		cl, 0 ; black background
-	mov		ch, 7 ; white foreground
-	mov		dh, 0 ; no blink
-	mov		ax, main_str
 	call	_printString
 
 	call	_yield
@@ -363,8 +369,10 @@ infiniteLoop_main:
 	
 SECTION .data
 	; global variables
-	main_str: db "Main", 0
-	rpn_header: db "   RPN Calculator                                                               ", 0
+	exit_header: db "                            -- Press ESC to exit --                             ", 0
+	rpn_header: db "                    RPN Calculator                               Music          ", 0
+	rpn_rightBorder: times 11 db " ", 13, 10
+					 db 0
 	gameOfLife_header:	db "   John Conway's                                                                ", 13, 10
 						db "  The Game of Life                           Graphics                           ", 0
 	gameOfLife_grid: times 10 db ". . . . . . . . . .", 13, 10
