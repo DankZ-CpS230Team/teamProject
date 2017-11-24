@@ -10,6 +10,23 @@ SECTION .text
 start:
 	mov		dx, cs
 	mov		ds, dx
+	
+	; set up custom keyboard hardware interrupt
+	cli
+	mov		ax, 0
+	mov		es, ax
+
+	mov		dx, [es:0x9*4]
+	mov		[previous9], dx
+	mov		ax, [es:0x9*4+2]
+	mov		[previous9+2], ax
+
+	mov		dx, keyboard
+	mov		[es:0x9*4], dx
+	mov		ax, cs 
+	mov		[es:0x9*4+2], ax
+	sti
+	
 	; spawn tasks
 	mov		dx, _main
 	call	_spawn_new_task
@@ -17,8 +34,22 @@ start:
 	call	_spawn_new_task
 	mov		dx, _taskB
 	call	_spawn_new_task
-	jmp _main
-
+	jmp		_main
+	
+terminate:
+	; restore old keyboard hardware interrupt
+	cli
+	mov		dx, [previous9]
+	mov		[es:0x9*4], dx
+	mov		ax, [previous9 + 2]
+	mov		[es:0x9*4+2], ax
+	sti
+	
+	mov		ah, 0x4c
+	mov		al, 0
+	int		0x21
+	; terminates program; exit code 0
+	
 ; spawns new task
 ; dx should contain the address of the function to run
 _spawn_new_task:
@@ -302,8 +333,8 @@ _printString:
 	pop		ax
 	ret		; return to caller
 	
-; print "Main" in loop until interrupted
-_main:	
+; main function; draws headers/borders, monitors keypresses
+_main:
 	
 infiniteLoop_main:
 	; set video mode
@@ -353,7 +384,16 @@ infiniteLoop_main:
 	mov		dh, 0
 	mov		ax, gameOfLife_grid
 	call	_printString
+	
+	; if ESC pressed, exit program
+	cmp		byte [currentKey], 0x00
+	je		yield_Main
+	cmp		byte [currentKey], 0x01
+	jne		yield_Main
+	jmp		exit_program
 
+yield_Main:
+	mov		byte [currentKey], 0
 	call	_yield
 	; pause after drawing updates
 	mov		ah, 0x86
@@ -363,12 +403,27 @@ infiniteLoop_main:
 
 	jmp		infiniteLoop_main
 
-	mov	ah, 0x4c
-	mov	al, 0
-	int	0x21
+exit_program:
+	mov		byte [currentKey], 0
+	; set video mode once more to clear screen
+	mov		ah, 0x0
+	mov		al, 0x3
+	int		0x10
+	jmp		terminate
+	
+; custom keyboard hardware interrupt
+keyboard:
+	push	ax
+	in		al, 0x60
+	mov		byte [currentKey], al
+	mov		al, 0x20
+	out		0x20, al
+	pop		ax
+	iret
 	
 SECTION .data
 	; global variables
+	;	strings
 	exit_header: db "                            -- Press ESC to exit --                             ", 0
 	rpn_header: db "                    RPN Calculator                               Music          ", 0
 	rpn_rightBorder: times 11 db " ", 13, 10
@@ -381,10 +436,15 @@ SECTION .data
 							db 0
 	taskA_str: db "I am task A", 0
 	taskB_str: db "I am", 13, 10, "task B", 0
+	
+	;	current key scan code
+	currentKey: db 0
+	;	address of previous 0x09 interrupt
+	previous9: dd 0
 
 	; global variables for stacks
 	current_task: db 0
-	stacks: times (256 * 6) db 0 ; 5 fake stacks of size 256 bytes
+	stacks: times (256 * 6) db 0 ; 6 fake stacks of size 256 bytes
 	task_status: times 6 db 0 ; 0 means inactive, 1 means active
 	stack_pointers: dw 0 ; the first pointer needs to be to the real stack !
 					dw stacks + (256 * 1)
