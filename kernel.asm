@@ -38,12 +38,12 @@ start:
 	
 terminate:
 	; restore old keyboard hardware interrupt
-	cli
+	mov		ax, 0
+	mov		es, ax
 	mov		dx, [previous9]
 	mov		[es:0x9*4], dx
 	mov		ax, [previous9 + 2]
 	mov		[es:0x9*4+2], ax
-	sti
 	
 	mov		ah, 0x4c
 	mov		al, 0
@@ -388,7 +388,7 @@ infiniteLoop_main:
 	; if ESC pressed, exit program
 	cmp		byte [currentKey], 0x00
 	je		yield_Main
-	cmp		byte [currentKey], 0x01
+	cmp		byte [currentKey], 0x81
 	jne		yield_Main
 	jmp		exit_program
 
