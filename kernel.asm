@@ -36,6 +36,8 @@ start:
 	call	_spawn_new_task
 	mov		dx, _rpnCalculator
 	call	_spawn_new_task
+	mov		dx, _gameOfLife
+	call 	_spawn_new_task
 	jmp		_main
 	
 terminate:
@@ -223,6 +225,96 @@ yield_B:
 	call	_yield
 	jmp		jumpB_begin
 	
+; task that prints a 19x19 version of Conway's Game of Life
+_gameOfLife:
+	push 	ax
+	push	bx
+	push 	cx
+	push	dx
+	
+; set the position to start printing at 0, 0 (for now)
+	mov		bl, 0
+	mov		bh, 30
+	
+; update and print the grid
+	mov 	ax, 0	
+_y_loop:
+	mov		dh, 0
+_x_loop:
+	
+	; put the character to be printed into dl
+	push 	bx
+	mov		bx, ax
+	mov		dl, [ds:gameOfLife_grid+bx]
+	pop 	bx
+	
+	; set the colors
+	mov		cl, 0
+	mov		ch, 4
+	
+	
+	; turn off blink
+	push 	dx
+	mov		dh, 0
+	; print the character
+	call 	_printChar
+	pop 	dx
+	
+	inc		dh
+	inc		ax
+	
+	cmp		dh, 20
+	je		_x_loop_end
+	jmp		_x_loop
+_x_loop_end:
+	; print a CRLF character to return to the next line
+	inc		bh
+	inc		bh
+	mov		bl, 0
+	
+	cmp		ax, 200
+	je		_y_loop_end
+	jmp		_y_loop
+_y_loop_end:
+	
+
+	pop		dx
+	pop		cx
+	pop		bx
+	pop 	ax
+	call	_yield
+	jmp		_gameOfLife
+
+; helper method for Game of Life
+; takes the cell location in ax
+; and returns the number of adjacent live cells in bx
+_check_adjacent_cells:
+	push 	ax
+
+	mov 	bx, 0
+	
+
+	pop		ax
+	ret
+
+; helper method for _check_adjacent_cells
+; takes a cell location in ax
+; returns a corrected cell location in ax
+_correct_cell_location:
+	cmp		ax, 0
+	jl		_less_than
+	cmp		ax, 199
+	jg		_greater_than
+	jmp		_return
+_less_than:
+	add 	ax, 200
+	jmp	 	_return
+_greater_than:
+	sub		ax, 200
+_return:
+	ret
+
+	
 ; RPN Calculator task
 ; prints visuals such as expression being entered and result
 ; processes RPN string when enter is pressed
@@ -385,7 +477,6 @@ end_addToRPNString:
 ; main function; draws headers/borders, monitors keypresses
 _main:
 	
-infiniteLoop_main:
 	; set video mode
 	mov		ah, 0x0
 	mov		al, 0x3
@@ -426,13 +517,7 @@ infiniteLoop_main:
 	mov		ax, gameOfLife_rightBorder
 	call	_printString
 	
-	mov		bl, 0
-	mov		bh, 30
-	mov		cl, 0
-	mov		ch, 7
-	mov		dh, 0
-	mov		ax, gameOfLife_grid
-	call	_printString
+infiniteLoop_main:
 	
 	; check for keypress
 	cmp		byte [currentKey], 0x00
@@ -660,8 +745,7 @@ SECTION .data
 					 db 0
 	gameOfLife_header:	db "   John Conway's                                                                ", 13, 10
 						db "   Game of Life                              Graphics                           ", 0
-	gameOfLife_grid: times 10 db ". . . . . . . . . .", 13, 10
-					 db 0
+	gameOfLife_grid: db ' *                    *                 ***                                                                                                                                                             '
 	gameOfLife_rightBorder: times 10 db " ", 13, 10
 							db 0
 	

@@ -1,6 +1,6 @@
 Bugs:
-	- Screen flickers, probably due to re-drawing
+	- Tasks don't erase themselves when they move or delete characters.
 	
 Time spent:
 	Zachary Hayes: 11.25 hrs.
-	Ryan Longacre: 6.1 hrs.
+	Ryan Longacre: 8.0 hrs.
