@@ -332,23 +332,23 @@ rpn_printString:
 	call	_printString
 	jmp		rpn_end
 rpn_doEvaluate:
-	mov		di, rpn_string - 1
-	; di points to next character
+	mov		si, rpn_string - 1
+	; si points to next character
 	rpn_expression:
-		inc		di
+		inc		si
 		; check if we're at end of string
-		mov		ax, di
+		mov		ax, si
 		sub		ax, rpn_string
 		cmp		ax, [rpn_strPointer]
 		jge		rpn_dontQuit
 		jmp		rpn_doneEvaluate
 	rpn_dontQuit:
 		; check if char is a number
-		cmp		word [di], '0'
+		cmp		word [si], '0'
 		jge		rpn_aboveZero
 		jmp		rpn_notNumber
 	rpn_aboveZero:
-		cmp		word [di], '9'
+		cmp		word [si], '9'
 		jle		rpn_isNumber
 		jmp		rpn_notNumber
 		
@@ -360,7 +360,7 @@ rpn_doEvaluate:
 		mov		byte [rpn_enteringNum], 1
 		mov		word [rpn_curNum], 0 ; set curNum to 0
 	rpn_addToCurrentNum:
-		mov		dx, [di] ; save input to dx
+		mov		dx, [si] ; save input to dx
 		sub		dx, '0' ; convert input from ASCII to int value
 		mov		ax, [rpn_curNum]
 		mov		bx, 10 ; multiply curNum by 10, then add new char
@@ -368,6 +368,125 @@ rpn_doEvaluate:
 		add		ax, dx
 		mov		word [rpn_curNum], ax
 		jmp		rpn_expression
+	
+	rpn_notNumber:
+		; below logic:
+		;	if entering number, finish number (push to stack)
+		;	then check for operator
+		;		ignore character if not operator
+		;		else perform operation
+		cmp		word [rpn_enteringNum], 1
+		jne		rpn_checkOperator
+		jmp		rpn_numberDone ; finish entering number
+
+	rpn_checkOperator:
+		; compare si to rpn_strPointer
+		; if equal, print result and exit loop
+		mov		ax, si
+		sub		ax, rpn_string
+		cmp		ax, [rpn_strPointer]
+		jne		rpn_notEnd
+		jmp		rpn_exprDone
+	rpn_notEnd:
+		; check each operator
+		; if [si] matches one, do operation
+		; else ignore char and get input again
+		cmp		word [si], '+'
+		je		rpn_addition
+		jmp		rpn_notPlus
+	rpn_addition:
+		call	_rpn_pop_value
+		mov		bx, ax ; save first value
+		call	_rpn_pop_value
+		add		ax, bx
+		call	_rpn_push_value
+		jmp		rpn_expression
+	rpn_notPlus:
+		cmp		word [si], '-'
+		je		rpn_subtraction
+		jmp		rpn_notMinus
+	rpn_subtraction:
+		call	_rpn_pop_value
+		mov		bx, ax
+		call	_rpn_pop_value
+		sub		ax, bx
+		call	_rpn_push_value
+		jmp		rpn_expression
+	rpn_notMinus:
+		cmp		word [si], '~'
+		je		rpn_negation
+		jmp		rpn_notTilde
+	rpn_negation:
+		call	_rpn_pop_value
+		neg		ax
+		call	_rpn_push_value
+		jmp		rpn_expression
+	rpn_notTilde:
+		cmp		word [si], '*'
+		je		rpn_multiplication
+		jmp		rpn_notAstrisk
+	rpn_multiplication:
+		call	_rpn_pop_value
+		mov		bx, ax
+		call	_rpn_pop_value
+		imul	bx
+		call	_rpn_push_value
+		jmp		rpn_expression
+	rpn_notAstrisk:
+		cmp		word [si], '/'
+		je		rpn_division
+		jmp		rpn_notSlash
+	rpn_division:
+		call	_rpn_pop_value
+		mov		bx, ax
+		call	_rpn_pop_value
+		cmp		bx, 0 ; check for divide by 0
+		jne		rpn_continueDivide
+		; divide by 0!
+		; TODO: print error message and break
+	rpn_continueDivide:
+		mov		dx, 0
+		idiv	bx
+		call	_rpn_push_value
+		jmp		rpn_expression
+	rpn_notSlash:
+		cmp		word [si], '%'
+		je		rpn_modulus
+		jmp		rpn_expression ; if we get here, the character isn't an operator, ignore
+	rpn_modulus:
+		call	_rpn_pop_value
+		mov		bx, ax
+		call	_rpn_pop_value
+		cmp		bx, 0 ; check for divide by 0
+		jne		rpn_continueMod
+		; divide by 0!
+		; TODO: print error message and break
+	rpn_continueMod:
+		mov		dx, 0
+		idiv	bx
+		mov		ax, dx ; remainder stored in dx
+		call	_rpn_push_value
+		jmp		rpn_expression
+		
+	rpn_numberDone:
+		mov		ax, word [rpn_curNum]
+		call	_rpn_push_value
+		; set curNum & enteringNum to 0
+		mov		word [rpn_curNum], 0
+		mov		byte [rpn_enteringNum], 0
+		; if char is 0 (NULL-terminator), done
+		; else still need to process it
+		cmp		byte [si], 0
+		je		rpn_exprDone
+		jmp		rpn_checkOperator
+	
+	rpn_exprDone:
+		; set curNum & enteringNum to 0
+		mov		word [rpn_curNum], 0
+		mov		byte [rpn_enteringNum], 0
+		; print value of expression
+		call	_rpn_pop_value
+		; TODO: go digit-by-digit and convert decimal number to string, then print
 
 	call	_clearRPNString
 	mov		byte [rpn_evaluate], 0
