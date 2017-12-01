@@ -319,6 +319,10 @@ _return:
 ; prints visuals such as expression being entered and result
 ; processes RPN string when enter is pressed
 _rpnCalculator:
+	cmp		byte [rpn_evaluate], 1
+	jne		rpn_printString
+	jmp		rpn_doEvaluate
+rpn_printString:
 	mov		bl, 0
 	mov		bh, 6
 	mov		cl, 0
@@ -326,8 +330,87 @@ _rpnCalculator:
 	mov		dh, 0
 	mov		ax, rpn_string
 	call	_printString
+	jmp		rpn_end
+rpn_doEvaluate:
+	call	_clearRPNString
+	mov		byte [rpn_evaluate], 0
+rpn_end:
 	call	_yield
 	jmp		_rpnCalculator
+
+; helper function for _rpnCalculator
+; pushes number in AX to rpnStack
+; clobbers DX
+; returns 0 in DX if successful, 1 otherwise
+_rpn_push_value:
+	push	ax
+	push	bx
+	push	cx
+	push	di
+	; check for stack overflow
+	cmp		word [rpn_top], 16
+	; if rpnTop == rpnStack + 16, stack is full, print error message
+	jne		doPush
+	mov		bl, 0
+	mov		bh, 8
+	mov		ch, 4
+	mov		cl, 0
+	mov		dh, 0
+	mov		ax, rpn_overflowStr
+	call	_printString
+	mov		dx, 1
+	jmp		end_push_value
+
+doPush:
+	mov		di, rpn_stack
+	add		di, rpn_top
+	add		di, rpn_top ; add twice beacuse rpnStack contains words (2 bytes)
+	mov		[di], ax
+	mov		dx, 0
+	inc		word [rpn_top]
+
+end_push_value:
+	pop		di
+	pop		cx
+	pop		bx
+	pop		ax
+	ret
+
+; helper function for _rpnCalculator
+; pops number from rpnStack
+; clobbers AX, DX
+; returns popped value in AX
+;	0 in DX if successful, 1 otherwise
+_rpn_pop_value:
+	push	bx
+	push	cx
+	push	di
+	; check for stack underflow
+	cmp		word [rpn_top], 0
+	; if rpnTop == rpnStack, stack is empty, print error message
+	mov		bl, 0
+	mov		bh, 8
+	mov		ch, 4
+	mov		cl, 0
+	mov		dh, 0
+	mov		ax, rpn_underflowStr
+	call	_printString
+	mov		dx, 1
+	jmp		end_pop_value
+
+doPop:
+	dec		word [rpn_top]
+	mov		di, rpn_stack
+	add		di, rpn_top
+	add		di, rpn_top ; add twice beacuse rpnStack contains words (2 bytes)
+	mov		ax, [di]
+	mov		dx, 0
+	
+end_pop_value:
+	pop		di
+	pop		cx
+	pop		bx
+	ret
 	
 ; helper function for modifying <rpn_string>
 ; takes char in al and appends it to <rpn_string> at location of <rpn_strPointer>
@@ -342,6 +425,9 @@ _addToRPNString:
 	push	bx
 	push	cx
 	push	dx
+	cmp		byte [rpn_evaluate], 1
+	je		end_addToRPNString
+_notEvaluating:
 	mov		si, rpn_string
 	cmp		al, 0
 	jne		rpnAppend
@@ -385,6 +471,35 @@ end_addToRPNString:
 	pop		cx
 	pop		bx
 	pop		ax
+	pop		si
+	ret
+
+; helper function for clearing <rpn_string>
+; sets all characters of <rpn_string> to spaces and resets cursor position
+; clobbers nothing
+; returns nothing
+_clearRPNString:
+	push	si
+	mov		si, rpn_string
+	add		si, [rpn_strPointer]
+clearLoop:
+	cmp		si, rpn_string
+	jne		clearChar
+	jmp		end_clearRPNString
+clearChar:
+	dec		si
+	mov		byte [si], " "
+	jmp		clearLoop
+
+end_clearRPNString:
+	mov		byte [rpn_strPointer], 0
+	; reset cursor
+	mov		ah, 0x02
+	mov		bh, 0
+	mov		dh, 3
+	mov		dl, 0
+	int		0x10
+	
 	pop		si
 	ret
 
@@ -447,7 +562,7 @@ _printChar:
 	inc		bl	
 	ret	; return to caller
 
-; print NULL-terminated string from DS:DX to screen using BIOS (INT 0x10)
+; print NULL-terminated string to screen=
 ; takes NULL-terminated string pointed to by DS:AX
 ; prints to row, col stored in BH, BL (respectively)
 ; clobbers nothing
@@ -596,8 +711,6 @@ checkKey_enter:
 	cmp		byte [currentKey], 0x1C ; enter
 	jne		shiftBranch
 	mov		byte [rpn_evaluate], 1
-	mov		al, '!'
-	call	_addToRPNString
 	jmp		yield_Main
 shiftBranch:
 	; start checking for character keypresses (numbers and operators only)
@@ -797,12 +910,14 @@ SECTION .data
 	rpn_string: times 54 db " " ; max length: 54
 				db 0
 	rpn_strPointer: dw 0 ; initialized to 0
+	rpn_stack: times 16 dw 0
+	rpn_top: dw 0
 	rpn_curNum: dw 0
 	rpn_enteringNum: db 0 ; bool variable to track if last input was a number
 	rpn_evaluate: db 0
-	rpn_underflowStr: db "Stack underflow!", 13, 10, 0
-	rpn_overflowStr: db "Stack Overflow!", 13, 10, 0
-	rpn_div0Str: db "Divide by 0!", 13, 10, 0
+	rpn_underflowStr: db "Stack underflow!                                      ", 0
+	rpn_overflowStr: db "Stack overflow!                                       ", 0
+	rpn_div0Str: db "Divide by 0!                                          ", 0
 	
 	; custom keyboard interrupt
 	;	current key scan code
