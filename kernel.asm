@@ -332,6 +332,43 @@ rpn_printString:
 	call	_printString
 	jmp		rpn_end
 rpn_doEvaluate:
+	mov		di, rpn_string - 1
+	; di points to next character
+	rpn_expression:
+		inc		di
+		; check if we're at end of string
+		mov		ax, di
+		sub		ax, rpn_string
+		cmp		ax, [rpn_strPointer]
+		jge		rpn_dontQuit
+		jmp		rpn_doneEvaluate
+	rpn_dontQuit:
+		; check if char is a number
+		cmp		word [di], '0'
+		jge		rpn_aboveZero
+		jmp		rpn_notNumber
+	rpn_aboveZero:
+		cmp		word [di], '9'
+		jle		rpn_isNumber
+		jmp		rpn_notNumber
+		
+	rpn_isNumber:
+		cmp		byte [rpn_enteringNum], 1
+		je		rpn_addToCurrentNum
+		; if not entering num, now we are
+		; set flag and clear curNum
+		mov		byte [rpn_enteringNum], 1
+		mov		word [rpn_curNum], 0 ; set curNum to 0
+	rpn_addToCurrentNum:
+		mov		dx, [di] ; save input to dx
+		sub		dx, '0' ; convert input from ASCII to int value
+		mov		ax, [rpn_curNum]
+		mov		bx, 10 ; multiply curNum by 10, then add new char
+		imul	bx
+		add		ax, dx
+		mov		word [rpn_curNum], ax
+		jmp		rpn_expression
+
 	call	_clearRPNString
 	mov		byte [rpn_evaluate], 0
 rpn_end:
