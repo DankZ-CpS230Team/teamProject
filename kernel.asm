@@ -320,35 +320,19 @@ _return:
 ; processes RPN string when enter is pressed
 _rpnCalculator:
 	cmp		byte [rpn_evaluate], 1
-	jne		rpn_printString
-	jmp		rpn_doEvaluate
-rpn_printString:
-	mov		bl, 0
-	mov		bh, 6
-	mov		cl, 0
-	mov		ch, 7
-	mov		dh, 0
-	mov		ax, rpn_string
-	call	_printString
-	jmp		rpn_end
+	je		rpn_doEvaluate
+	jmp		rpn_printString ; skip to printing if no numbers to crunch
 rpn_doEvaluate:
-	mov		si, rpn_string - 1
-	; si points to next character
+		mov		si, rpn_string - 1
+		; si points to next character
 	rpn_expression:
 		inc		si
-		; check if we're at end of string
-		mov		ax, si
-		sub		ax, rpn_string
-		cmp		ax, [rpn_strPointer]
-		jge		rpn_dontQuit
-		jmp		rpn_doneEvaluate
-	rpn_dontQuit:
 		; check if char is a number
-		cmp		word [si], '0'
+		cmp		byte [si], '0'
 		jge		rpn_aboveZero
 		jmp		rpn_notNumber
 	rpn_aboveZero:
-		cmp		word [si], '9'
+		cmp		byte [si], '9'
 		jle		rpn_isNumber
 		jmp		rpn_notNumber
 		
@@ -360,12 +344,13 @@ rpn_doEvaluate:
 		mov		byte [rpn_enteringNum], 1
 		mov		word [rpn_curNum], 0 ; set curNum to 0
 	rpn_addToCurrentNum:
-		mov		dx, [si] ; save input to dx
-		sub		dx, '0' ; convert input from ASCII to int value
+		mov		bx, [si] ; save input to bx
+		and		bx, 0x00FF ; only want lower bits (input is a char)
+		sub		bx, '0' ; convert input from ASCII to int value
 		mov		ax, [rpn_curNum]
-		mov		bx, 10 ; multiply curNum by 10, then add new char
-		imul	bx
-		add		ax, dx
+		mov		cx, 10 ; multiply curNum by 10, then add new char
+		imul	cx
+		add		ax, bx
 		mov		word [rpn_curNum], ax
 		jmp		rpn_expression
 	
@@ -375,7 +360,7 @@ rpn_doEvaluate:
 		;	then check for operator
 		;		ignore character if not operator
 		;		else perform operation
-		cmp		word [rpn_enteringNum], 1
+		cmp		byte [rpn_enteringNum], 1
 		jne		rpn_checkOperator
 		jmp		rpn_numberDone ; finish entering number
 
@@ -391,86 +376,179 @@ rpn_doEvaluate:
 		; check each operator
 		; if [si] matches one, do operation
 		; else ignore char and get input again
-		cmp		word [si], '+'
+		cmp		byte [si], '+'
 		je		rpn_addition
 		jmp		rpn_notPlus
 	rpn_addition:
 		call	_rpn_pop_value
+		; after EVERY push or pop, we have to check DX to see if any errors occurred
+		cmp		dx, 1
+		jne		rpn_addPop1OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_addPop1OK:
 		mov		bx, ax ; save first value
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_addPop2OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_addPop2OK:
 		add		ax, bx
 		call	_rpn_push_value
+		cmp		dx, 1
+		jne		rpn_addPushOK
+		mov		ax, rpn_overflowStr
+		jmp		rpn_error
+	rpn_addPushOK:
 		jmp		rpn_expression
 	rpn_notPlus:
-		cmp		word [si], '-'
+		cmp		byte [si], '-'
 		je		rpn_subtraction
 		jmp		rpn_notMinus
 	rpn_subtraction:
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_subPop1OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_subPop1OK:
 		mov		bx, ax
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_subPop2OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_subPop2OK:
 		sub		ax, bx
 		call	_rpn_push_value
+		cmp		dx, 1
+		jne		rpn_subPushOK
+		mov		ax, rpn_overflowStr
+		jmp		rpn_error
+	rpn_subPushOK:
 		jmp		rpn_expression
 	rpn_notMinus:
-		cmp		word [si], '~'
+		cmp		byte [si], '~'
 		je		rpn_negation
 		jmp		rpn_notTilde
 	rpn_negation:
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_negPopOK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_negPopOK:
 		neg		ax
 		call	_rpn_push_value
+		cmp		dx, 1
+		jne		rpn_negPushOK
+		mov		ax, rpn_overflowStr
+		jmp		rpn_error
+	rpn_negPushOK:
 		jmp		rpn_expression
 	rpn_notTilde:
-		cmp		word [si], '*'
+		cmp		byte [si], '*'
 		je		rpn_multiplication
 		jmp		rpn_notAstrisk
 	rpn_multiplication:
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_mulPop1OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_mulPop1OK:
 		mov		bx, ax
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_mulPop2OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_mulPop2OK:
 		imul	bx
 		call	_rpn_push_value
+		cmp		dx, 1
+		jne		rpn_mulPushOK
+		mov		ax, rpn_overflowStr
+		jmp		rpn_error
+	rpn_mulPushOK:
 		jmp		rpn_expression
 	rpn_notAstrisk:
-		cmp		word [si], '/'
+		cmp		byte [si], '/'
 		je		rpn_division
 		jmp		rpn_notSlash
 	rpn_division:
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_divPop1OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_divPop1OK:
 		mov		bx, ax
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_divPop2OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_divPop2OK:
 		cmp		bx, 0 ; check for divide by 0
 		jne		rpn_continueDivide
 		; divide by 0!
-		; TODO: print error message and break
+		mov		ax, rpn_div0Str
+		jmp		rpn_error
 	rpn_continueDivide:
 		mov		dx, 0
 		idiv	bx
 		call	_rpn_push_value
+		cmp		dx, 1
+		jne		rpn_divPushOK
+		mov		ax, rpn_overflowStr
+		jmp		rpn_error
+	rpn_divPushOK:
 		jmp		rpn_expression
 	rpn_notSlash:
-		cmp		word [si], '%'
+		cmp		byte [si], '%'
 		je		rpn_modulus
 		jmp		rpn_expression ; if we get here, the character isn't an operator, ignore
 	rpn_modulus:
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_modPop1OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_modPop1OK:
 		mov		bx, ax
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_modPop2OK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_modPop2OK:
 		cmp		bx, 0 ; check for divide by 0
 		jne		rpn_continueMod
 		; divide by 0!
-		; TODO: print error message and break
+		mov		ax, rpn_div0Str
+		jmp		rpn_error
 	rpn_continueMod:
 		mov		dx, 0
 		idiv	bx
 		mov		ax, dx ; remainder stored in dx
 		call	_rpn_push_value
+		cmp		dx, 1
+		jne		rpn_modPushOK
+		mov		ax, rpn_overflowStr
+		jmp		rpn_error
+	rpn_modPushOK:
 		jmp		rpn_expression
 		
 	rpn_numberDone:
 		mov		ax, word [rpn_curNum]
 		call	_rpn_push_value
+		cmp		dx, 1
+		jne		rpn_curNumPushOK
+		mov		ax, rpn_overflowStr
+		jmp		rpn_error
+	rpn_curNumPushOK:
 		; set curNum & enteringNum to 0
 		mov		word [rpn_curNum], 0
 		mov		byte [rpn_enteringNum], 0
@@ -486,16 +564,45 @@ rpn_doEvaluate:
 		mov		byte [rpn_enteringNum], 0
 		; print value of expression
 		call	_rpn_pop_value
+		cmp		dx, 1
+		jne		rpn_popAnsOK
+		mov		ax, rpn_underflowStr
+		jmp		rpn_error
+	rpn_popAnsOK:
 		; TODO: go digit-by-digit and convert decimal number to string, then print
-
-	call	_clearRPNString
-	mov		byte [rpn_evaluate], 0
+		jmp		rpn_cleanUp
+		
+	; before jumping here, put error msg address in AX
+	rpn_error:
+		mov		bl, 0
+		mov		bh, 8
+		mov		ch, 4
+		mov		cl, 0
+		mov		dh, 0
+		call	_printString
+		
+	rpn_cleanUp:
+		mov		word [rpn_top], 0 ; reset rpn_top to top of rpn_stack
+		call	_clearRPNString ; clear rpn_string
+		mov		byte [rpn_evaluate], 0 ; turn of evaluate flag
+		; and we're done!
+		
+rpn_printString:
+	mov		bl, 0
+	mov		bh, 6
+	mov		cl, 0
+	mov		ch, 7
+	mov		dh, 0
+	mov		ax, rpn_string
+	call	_printString
+	jmp		rpn_end
+	
 rpn_end:
 	call	_yield
 	jmp		_rpnCalculator
 
 ; helper function for _rpnCalculator
-; pushes number in AX to rpnStack
+; pushes number in AX to rpn_stack
 ; clobbers DX
 ; returns 0 in DX if successful, 1 otherwise
 _rpn_push_value:
@@ -505,22 +612,15 @@ _rpn_push_value:
 	push	di
 	; check for stack overflow
 	cmp		word [rpn_top], 16
-	; if rpnTop == rpnStack + 16, stack is full, print error message
+	; if rpn_top == rpn_stack + 16, stack is full, stack overflow error
 	jne		doPush
-	mov		bl, 0
-	mov		bh, 8
-	mov		ch, 4
-	mov		cl, 0
-	mov		dh, 0
-	mov		ax, rpn_overflowStr
-	call	_printString
 	mov		dx, 1
 	jmp		end_push_value
 
 doPush:
 	mov		di, rpn_stack
-	add		di, rpn_top
-	add		di, rpn_top ; add twice beacuse rpnStack contains words (2 bytes)
+	add		di, [rpn_top]
+	add		di, [rpn_top] ; add twice beacuse rpn_stack contains words (2 bytes)
 	mov		[di], ax
 	mov		dx, 0
 	inc		word [rpn_top]
@@ -533,32 +633,26 @@ end_push_value:
 	ret
 
 ; helper function for _rpnCalculator
-; pops number from rpnStack
+; pops number from rpn_stack
 ; clobbers AX, DX
 ; returns popped value in AX
-;	0 in DX if successful, 1 otherwise
+;		  0 in DX if successful, 1 otherwise
 _rpn_pop_value:
 	push	bx
 	push	cx
 	push	di
 	; check for stack underflow
 	cmp		word [rpn_top], 0
-	; if rpnTop == rpnStack, stack is empty, print error message
-	mov		bl, 0
-	mov		bh, 8
-	mov		ch, 4
-	mov		cl, 0
-	mov		dh, 0
-	mov		ax, rpn_underflowStr
-	call	_printString
+	; if rpn_top == rpn_stack, stack is empty, stack underflow error
+	jne		doPop
 	mov		dx, 1
 	jmp		end_pop_value
 
 doPop:
 	dec		word [rpn_top]
 	mov		di, rpn_stack
-	add		di, rpn_top
-	add		di, rpn_top ; add twice beacuse rpnStack contains words (2 bytes)
+	add		di, [rpn_top]
+	add		di, [rpn_top] ; add twice beacuse rpn_stack contains words (2 bytes)
 	mov		ax, [di]
 	mov		dx, 0
 	
