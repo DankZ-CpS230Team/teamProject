@@ -225,41 +225,74 @@ yield_B:
 	call	_yield
 	jmp		jumpB_begin
 	
-; task that prints a 19x19 version of Conway's Game of Life
+; task that prints a 20x10 version of Conway's Game of Life
+	
 _gameOfLife:
 	push 	ax
 	push	bx
 	push 	cx
 	push	dx
 	
-; set the position to start printing at 0, 0 (for now)
+; set the position to start printing at 0, 30
 	mov		bl, 0
 	mov		bh, 30
 	
-; update and print the grid
+; print and update the grid
 	mov 	ax, 0	
 _y_loop:
 	mov		dh, 0
 _x_loop:
-	
+
 	; put the character to be printed into dl
 	push 	bx
 	mov		bx, ax
-	mov		dl, [ds:gameOfLife_grid+bx]
+	mov		dl, [ds:gameOfLife_grid1+bx]
 	pop 	bx
 	
 	; set the colors
 	mov		cl, 0
 	mov		ch, 4
-	
-	
 	; turn off blink
 	push 	dx
 	mov		dh, 0
 	; print the character
 	call 	_printChar
 	pop 	dx
+
+	; check the surrounding cells and update the current cell accordingly
+	push	bx
+	call	_check_adjacent_cells
 	
+	; if the cell has:
+	; less than 2 neighbors, it dies
+	; 2 neighbors, it stays the same
+	; 3 neighbors, it is set to live
+	; more than 3, it dies
+	cmp		bx, 2
+	jl		_clear_cell
+	je		_carry_cell
+	cmp		bx, 3
+	je		_set_cell
+	jg		_clear_cell
+	
+_clear_cell:
+	mov		bx, ax
+	mov		byte [ds:gameOfLife_grid2+bx], ' '
+	jmp		_done_with_cell
+_set_cell:
+	mov		bx, ax
+	mov		byte [ds:gameOfLife_grid2+bx], '*'
+	jmp		_done_with_cell
+_carry_cell:
+	mov		bx, ax
+	push	dx
+	mov		dl, [ds:gameOfLife_grid1+bx]
+	mov		byte [ds:gameOfLife_grid2+bx], dl
+	pop 	dx
+_done_with_cell:
+	pop		bx
+	
+	; increment the counting registers
 	inc		dh
 	inc		ax
 	
@@ -276,8 +309,21 @@ _x_loop_end:
 	je		_y_loop_end
 	jmp		_y_loop
 _y_loop_end:
-	
 
+	mov		bx, 0
+move_loop:
+	
+	; move the character from the second grid to the first
+	mov		dl, [ds:gameOfLife_grid2+bx]
+	mov		byte [ds:gameOfLife_grid1+bx], dl
+	
+	inc		bx
+	cmp		bx, 200
+	je		move_loop_end
+	jmp		move_loop
+move_loop_end:
+	
+	; de-clobber the registers
 	pop		dx
 	pop		cx
 	pop		bx
@@ -290,27 +336,94 @@ _y_loop_end:
 ; and returns the number of adjacent live cells in bx
 _check_adjacent_cells:
 	push 	ax
+	push	dx
+	mov 	bx, ax
+	mov		ax, 0
 
-	mov 	bx, 0
-	
+_topleft:
+	sub		bx, 21
+	call	_correct_cell_location
+	mov		dl, byte [ds:gameOfLife_grid1+bx]
+	cmp		dl, ' '
+	je		_topcenter
+	inc		ax
 
+_topcenter:
+	add		bx, 1
+	call	_correct_cell_location
+	mov		dl, byte [ds:gameOfLife_grid1+bx]
+	cmp		dl, ' '
+	je		_topright
+	inc		ax
+
+_topright:
+	add		bx, 1
+	call	_correct_cell_location
+	mov		dl, byte [ds:gameOfLife_grid1+bx]
+	cmp		dl, ' '
+	je		_left
+	inc		ax
+
+_left:
+	add		bx, 18
+	call	_correct_cell_location
+	mov		dl, byte [ds:gameOfLife_grid1+bx]
+	cmp		dl, ' '
+	je		_right
+	inc		ax
+
+_right:
+	add		bx, 2
+	call	_correct_cell_location
+	mov		dl, byte [ds:gameOfLife_grid1+bx]
+	cmp		dl, ' '
+	je		_bottomleft
+	inc		ax
+
+_bottomleft:
+	add		bx, 18
+	call	_correct_cell_location
+	mov		dl, byte [ds:gameOfLife_grid1+bx]
+	cmp		dl, ' '
+	je		_bottomcenter
+	inc		ax
+
+_bottomcenter:
+	add		bx, 1
+	call	_correct_cell_location
+	mov		dl, byte [ds:gameOfLife_grid1+bx]
+	cmp		dl, ' '
+	je		_bottomright
+	inc		ax
+
+_bottomright:
+	add 	bx, 1
+	call	_correct_cell_location
+	mov		dl, byte [ds:gameOfLife_grid1+bx]
+	cmp		dl, ' '
+	je		_end_return
+	inc		ax
+
+_end_return:
+	mov		bx, ax
+	pop		dx
 	pop		ax
 	ret
 
 ; helper method for _check_adjacent_cells
-; takes a cell location in ax
-; returns a corrected cell location in ax
+; takes a cell location in bx
+; returns a corrected cell location in bx
 _correct_cell_location:
-	cmp		ax, 0
+	cmp		bx, 0
 	jl		_less_than
-	cmp		ax, 199
+	cmp		bx, 199
 	jg		_greater_than
 	jmp		_return
 _less_than:
-	add 	ax, 200
+	add 	bx, 200
 	jmp	 	_return
 _greater_than:
-	sub		ax, 200
+	sub		bx, 200
 _return:
 	ret
 
@@ -1260,9 +1373,13 @@ SECTION .data
 	rpn_header: db "                    RPN Calculator                               Music          ", 0
 	rpn_rightBorder: times 11 db " ", 13, 10
 					 db 0
+	
+	; Game of Life strings
 	gameOfLife_header:	db "   John Conway's                                                                ", 13, 10
 						db "   Game of Life                              Graphics                           ", 0
-	gameOfLife_grid: db ' *                    *                 ***                                                                                                                                                             '
+	gameOfLife_grid1: db ' *                    *                 ***                                                                                                                                                             '
+	gameOfLife_grid2: db '                                                                                                                                                                                                        '
+	
 	gameOfLife_rightBorder: times 10 db " ", 13, 10
 							db 0
 	
