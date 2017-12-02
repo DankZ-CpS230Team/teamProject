@@ -583,6 +583,9 @@ rpn_doEvaluate:
 		; largest number of digits that can fit in 16 bits is 5
 		; so start with BX = 10000
 		mov		bx, 10000
+		; DI will hold a flag to help ignore leading 0s
+		; not actually using it for indexing, I just need another register
+		mov		di, 0
 		cmp		cx, 0
 		jge		rpn_decimalToString
 		; negative answer, print '-' sign and do 2's complement conversion on AX
@@ -596,10 +599,20 @@ rpn_doEvaluate:
 		mov		dx, 0
 		mov		ax, cx
 		idiv	bx
+		; if digit is 0 and we haven't seen anything else (i.e. DI == 0)
+		; ignore it, it's a leading 0
+		cmp		ax, 0
+		jne		rpn_addDigit
+		cmp		di, 0
+		je		rpn_nextDigit
+	rpn_addDigit:
+		mov		di, 1
 		add		ax, '0' ; convert to ASCII char
 		mov		byte [si], al ; and add to string
+		inc		si
+		sub		ax, '0' ; get back to the decimal value for next steps
+	rpn_nextDigit:
 		; subtract digit * BX from CX to ditch the leading digit
-		sub		ax, '0' ; get back to the decimal value
 		imul	bx
 		sub		cx, ax
 		; divide BX by 10
@@ -608,11 +621,10 @@ rpn_doEvaluate:
 		mov		bx, 10
 		idiv	bx
 		mov		bx, ax
-		inc		si
 		jmp		rpn_decimalToString
 	rpn_conversionDone:
 		mov		bl, 0
-		mov		bh, 8
+		mov		bh, 10
 		mov		ch, 2
 		mov		cl, 0
 		mov		dh, 0
@@ -623,13 +635,24 @@ rpn_doEvaluate:
 	; before jumping here, put error msg address in AX
 	rpn_error:
 		mov		bl, 0
-		mov		bh, 8
-		mov		ch, 4
+		mov		bh, 10
 		mov		cl, 0
+		mov		ch, 4
 		mov		dh, 0
 		call	_printString
 		
 	rpn_cleanUp:
+		; print just-evaluated (or crashed) string below
+		mov		ax, rpn_string
+		mov		bx, rpn_lastStr
+		call	_strcpy
+		mov		ax, bx
+		mov		bl, 0
+		mov		bh, 8
+		mov		cl, 0
+		mov		ch, 8
+		mov		dh, 0
+		call	_printString
 		mov		word [rpn_top], 0 ; reset rpn_top to top of rpn_stack
 		call	_clearRPNString ; clear rpn_string
 		mov		byte [rpn_evaluate], 0 ; turn off evaluate flag
@@ -817,6 +840,32 @@ clearChar:
 	inc		si
 	jmp		clearLoop
 end_clearString:
+	pop		si
+	ret
+	
+; copies chars from string pointed to by AX into string pointed to by BX
+; assumes [AX] string is same length as [BX] string
+; clobbers nothing
+; returns nothing
+_strcpy:
+	push	si
+	push	di
+	push	dx
+	mov		si, ax
+	mov		di, bx
+copyLoop:
+	cmp		byte [si], 0 ; stop at NULL-terminator
+	jne		copyChar
+	jmp		end_strcpy
+copyChar:
+	mov		dl, byte [si]
+	mov		byte [di], dl
+	inc		si
+	inc		di
+	jmp		copyLoop
+end_strcpy:
+	pop		dx
+	pop		di
 	pop		si
 	ret
 
@@ -1232,6 +1281,8 @@ SECTION .data
 	rpn_curNum: dw 0
 	rpn_enteringNum: db 0 ; bool variable to track if last input was a number
 	rpn_evaluate: db 0
+	rpn_lastStr: times 54 db " "
+				 db 0
 	rpn_resultStr: db "  =                                                   ", 0
 	rpn_underflowStr: db "  Stack underflow!                                    ", 0
 	rpn_overflowStr: db "  Stack overflow!                                     ", 0
