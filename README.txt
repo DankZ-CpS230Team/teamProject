@@ -3,4 +3,4 @@ Bugs:
 	
 Time spent:
 	Zachary Hayes: 17.75 hrs.
-	Ryan Longacre: 8.0 hrs.
+	Ryan Longacre: 14.5 hrs.
