@@ -570,6 +570,47 @@ rpn_doEvaluate:
 		jmp		rpn_error
 	rpn_popAnsOK:
 		; TODO: go digit-by-digit and convert decimal number to string, then print
+		mov		si, rpn_resultStr
+		add		si, 5 ; gets us past the '='
+		mov		cx, ax ; to protect the answer, since idiv messes with AX
+		; we'll divide by BX to get digits
+		; largest number of digits that can fit in 16 bits is 5
+		; so start with BX = 10000
+		mov		bx, 10000
+		cmp		cx, 0
+		jge		rpn_decimalToString
+		; negative answer, print '-' sign
+		mov		byte [si], '-'
+		inc		si
+	rpn_decimalToString:
+		cmp		bx, 0
+		je		rpn_conversionDone
+		; next digit is ans (in CX) / BX
+		mov		dx, 0
+		mov		ax, cx
+		idiv	bx
+		add		ax, '0' ; convert to ASCII char
+		mov		byte [si], al ; and add to string
+		; subtract digit * BX from CX to ditch the leading digit
+		sub		ax, '0' ; get back to the decimal value
+		imul	bx
+		sub		cx, ax
+		; divide BX by 10
+		mov		dx, 0
+		mov		ax, bx
+		mov		bx, 10
+		idiv	bx
+		mov		bx, ax
+		inc		si
+		jmp		rpn_decimalToString
+	rpn_conversionDone:
+		mov		bl, 0
+		mov		bh, 8
+		mov		ch, 2
+		mov		cl, 0
+		mov		dh, 0
+		mov		ax, rpn_resultStr
+		call	_printString
 		jmp		rpn_cleanUp
 		
 	; before jumping here, put error msg address in AX
@@ -584,7 +625,7 @@ rpn_doEvaluate:
 	rpn_cleanUp:
 		mov		word [rpn_top], 0 ; reset rpn_top to top of rpn_stack
 		call	_clearRPNString ; clear rpn_string
-		mov		byte [rpn_evaluate], 0 ; turn of evaluate flag
+		mov		byte [rpn_evaluate], 0 ; turn off evaluate flag
 		; and we're done!
 		
 rpn_printString:
@@ -1165,9 +1206,10 @@ SECTION .data
 	rpn_curNum: dw 0
 	rpn_enteringNum: db 0 ; bool variable to track if last input was a number
 	rpn_evaluate: db 0
-	rpn_underflowStr: db "Stack underflow!                                      ", 0
-	rpn_overflowStr: db "Stack overflow!                                       ", 0
-	rpn_div0Str: db "Divide by 0!                                          ", 0
+	rpn_resultStr: db "  =                                                   ", 0
+	rpn_underflowStr: db "  Stack underflow!                                    ", 0
+	rpn_overflowStr: db "  Stack overflow!                                     ", 0
+	rpn_div0Str: db "  Divide by 0!                                        ", 0
 	
 	; custom keyboard interrupt
 	;	current key scan code
