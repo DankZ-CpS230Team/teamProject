@@ -432,6 +432,10 @@ _return:
 ; prints visuals such as expression being entered and result
 ; processes RPN string when enter is pressed
 _rpnCalculator:
+	cmp		byte [rpn_evaluate], 1
+	jne		rpn_printString
+	jmp		rpn_doEvaluate
+rpn_printString:
 	mov		bl, 0
 	mov		bh, 6
 	mov		cl, 0
@@ -439,8 +443,178 @@ _rpnCalculator:
 	mov		dh, 0
 	mov		ax, rpn_string
 	call	_printString
+	jmp		rpn_end
+rpn_doEvaluate:
+	call	_clearRPNString
+	mov		byte [rpn_evaluate], 0
+rpn_end:
 	call	_yield
 	jmp		_rpnCalculator
+
+; helper function for _rpnCalculator
+; pushes number in AX to rpnStack
+; clobbers DX
+; returns 0 in DX if successful, 1 otherwise
+_rpn_push_value:
+	push	ax
+	push	bx
+	push	cx
+	push	di
+	; check for stack overflow
+	cmp		word [rpn_top], 16
+	; if rpnTop == rpnStack + 16, stack is full, print error message
+	jne		doPush
+	mov		bl, 0
+	mov		bh, 8
+	mov		ch, 4
+	mov		cl, 0
+	mov		dh, 0
+	mov		ax, rpn_overflowStr
+	call	_printString
+	mov		dx, 1
+	jmp		end_push_value
+
+doPush:
+	mov		di, rpn_stack
+	add		di, rpn_top
+	add		di, rpn_top ; add twice beacuse rpnStack contains words (2 bytes)
+	mov		[di], ax
+	mov		dx, 0
+	inc		word [rpn_top]
+
+end_push_value:
+	pop		di
+	pop		cx
+	pop		bx
+	pop		ax
+	ret
+
+; helper function for _rpnCalculator
+; pops number from rpnStack
+; clobbers AX, DX
+; returns popped value in AX
+;	0 in DX if successful, 1 otherwise
+_rpn_pop_value:
+	push	bx
+	push	cx
+	push	di
+	; check for stack underflow
+	cmp		word [rpn_top], 0
+	; if rpnTop == rpnStack, stack is empty, print error message
+	mov		bl, 0
+	mov		bh, 8
+	mov		ch, 4
+	mov		cl, 0
+	mov		dh, 0
+	mov		ax, rpn_underflowStr
+	call	_printString
+	mov		dx, 1
+	jmp		end_pop_value
+
+doPop:
+	dec		word [rpn_top]
+	mov		di, rpn_stack
+	add		di, rpn_top
+	add		di, rpn_top ; add twice beacuse rpnStack contains words (2 bytes)
+	mov		ax, [di]
+	mov		dx, 0
+	
+end_pop_value:
+	pop		di
+	pop		cx
+	pop		bx
+	ret
+	
+; helper function for modifying <rpn_string>
+; takes char in al and appends it to <rpn_string> at location of <rpn_strPointer>
+; if al is 0, removes last char (replaces it with 0) and decrements <rpn_strPointer>
+; if <rpn_strPointer> is at beginning/end of the <rpn_string>, function does nothing if
+;	remove/append operation is requested
+; clobbers nothing
+; returns nothing
+_addToRPNString:
+	push	si
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+	cmp		byte [rpn_evaluate], 1
+	je		end_addToRPNString
+_notEvaluating:
+	mov		si, rpn_string
+	cmp		al, 0
+	jne		rpnAppend
+	jmp		rpnBackspace
+rpnAppend:
+	; if <rpn_strPointer> is pointing one past the end, do nothing
+	cmp		word [rpn_strPointer], 54
+	jne		doAppend
+	jmp		end_addToRPNString
+doAppend:
+	add		si, [rpn_strPointer]
+	mov		byte [si], al
+	inc		word [rpn_strPointer]
+	; move cursor ahead
+	mov		ah, 0x03
+	mov		bh, 0
+	int		0x10
+	inc		dl
+	mov		ah, 0x02
+	int		0x10
+	jmp		end_addToRPNString
+rpnBackspace:
+	; if <rpn_strPointer> is pointing to beginning, do nothing
+	cmp		word [rpn_strPointer], 0
+	jne		doBackspace
+	jmp		end_addToRPNString
+doBackspace:
+	dec		word [rpn_strPointer]
+	add		si, [rpn_strPointer]
+	mov		byte [si], " "
+	; move cursor back
+	mov		ah, 0x03
+	mov		bh, 0
+	int		0x10
+	dec		dl
+	mov		ah, 0x02
+	int		0x10
+	jmp		end_addToRPNString
+end_addToRPNString:
+	pop		dx
+	pop		cx
+	pop		bx
+	pop		ax
+	pop		si
+	ret
+
+; helper function for clearing <rpn_string>
+; sets all characters of <rpn_string> to spaces and resets cursor position
+; clobbers nothing
+; returns nothing
+_clearRPNString:
+	push	si
+	mov		si, rpn_string
+	add		si, [rpn_strPointer]
+clearLoop:
+	cmp		si, rpn_string
+	jne		clearChar
+	jmp		end_clearRPNString
+clearChar:
+	dec		si
+	mov		byte [si], " "
+	jmp		clearLoop
+
+end_clearRPNString:
+	mov		byte [rpn_strPointer], 0
+	; reset cursor
+	mov		ah, 0x02
+	mov		bh, 0
+	mov		dh, 3
+	mov		dl, 0
+	int		0x10
+	
+	pop		si
+	ret
 
 ; prints a char to the screen using 0x10 interrupt
 ; bl and bh are thee coordinates of where the char gets printed
@@ -501,7 +675,7 @@ _printChar:
 	inc		bl	
 	ret	; return to caller
 
-; print NULL-terminated string from DS:DX to screen using BIOS (INT 0x10)
+; print NULL-terminated string to screen=
 ; takes NULL-terminated string pointed to by DS:AX
 ; prints to row, col stored in BH, BL (respectively)
 ; clobbers nothing
@@ -549,43 +723,6 @@ _printString:
 	pop		bx
 	pop		ax
 	ret		; return to caller
-
-; helper function for modifying <rpn_string>
-; takes char in al and appends it to <rpn_string> at location of <rpn_strPointer>
-; if al is 0, removes last char (replaces it with 0) and decrements <rpn_strPointer>
-; if <rpn_strPointer> is at beginning/end of the <rpn_string>, function does nothing if
-;	remove/append operation is requested
-; clobbers nothing
-; returns nothing
-_addToRPNString:
-	push	si
-	mov		si, rpn_string
-	cmp		al, 0
-	jne		rpnAppend
-	jmp		rpnBackspace
-rpnAppend:
-	; if <rpn_strPointer> is pointing one past the end, do nothing
-	cmp		word [rpn_strPointer], 54
-	jne		doAppend
-	jmp		end_addToRPNString
-doAppend:
-	add		si, [rpn_strPointer]
-	mov		byte [si], al
-	inc		word [rpn_strPointer]
-	jmp		end_addToRPNString
-rpnBackspace:
-	; if <rpn_strPointer> is pointing to beginning, do nothing
-	cmp		word [rpn_strPointer], 0
-	jne		doBackspace
-	jmp		end_addToRPNString
-doBackspace:
-	dec		word [rpn_strPointer]
-	add		si, [rpn_strPointer]
-	mov		byte [si], 0
-	jmp		end_addToRPNString
-end_addToRPNString:
-	pop		si
-	ret
 	
 ; main function; draws headers/borders, monitors keypresses
 _main:
@@ -630,51 +767,65 @@ _main:
 	mov		ax, gameOfLife_rightBorder
 	call	_printString
 	
+	; set cursor position to _rpnCalculator window
+	mov		ah, 0x02
+	mov		bh, 0
+	mov		dh, 3
+	mov		dl, 0
+	int		0x10
+	
 infiniteLoop_main:
 	
 	; check for keypress
 	cmp		byte [currentKey], 0x00
-	jne		nextKey1
+	jne		checkKey_leftShiftOn
 	jmp		yield_Main ; no key pressed
-nextKey1:
+checkKey_leftShiftOn:
 	; check for shift to set <shift> boolean
 	cmp		byte [currentKey], 0x2A ; left shift pressed
-	jne		nextKey2
+	jne		checkKey_rightShiftOn
 	mov		byte [shift], 1
 	jmp		yield_Main
-nextKey2:
+checkKey_rightShiftOn:
 	cmp		byte [currentKey], 0x36 ; right shift pressed
-	jne		nextKey3
+	jne		checkKey_leftShiftOff
 	mov		byte [shift], 1
 	jmp		yield_Main
-nextKey3:
+checkKey_leftShiftOff:
 	cmp		byte [currentKey], 0xAA ; left shift released
-	jne		nextKey4
+	jne		checkKey_rightShiftOff
 	mov		byte [shift], 0
 	jmp		yield_Main
-nextKey4:
+checkKey_rightShiftOff:
 	cmp		byte [currentKey], 0xB6 ; right shift released
-	jne		nextKey5
+	jne		checkKey_esc
 	mov		byte [shift], 0
 	jmp		yield_Main
-nextKey5:
+checkKey_esc:
 	; if ESC pressed, exit program
 	cmp		byte [currentKey], 0x81
-	jne		nextKey6
+	jne		checkKey_space
 	jmp		exit_program
-nextKey6:
+checkKey_space:
 	cmp		byte [currentKey], 0x39 ; spacebar
-	jne		nextKey7
+	jne		checkKey_backspace
 	mov		al, ' '
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey7:
+checkKey_backspace:
 	cmp		byte [currentKey], 0x0E ; backspace
-	jne		nextKey8
+	jne		checkKey_enter
 	mov		al, 0
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey8:
+checkKey_enter:
+	; if enter pressed, turn on rpn_evaluate flag
+	; signals _rpnCalculator to evaluate the postfix string
+	cmp		byte [currentKey], 0x1C ; enter
+	jne		shiftBranch
+	mov		byte [rpn_evaluate], 1
+	jmp		yield_Main
+shiftBranch:
 	; start checking for character keypresses (numbers and operators only)
 	; check operators first (no pattern)
 	cmp		byte [shift], 1
@@ -684,20 +835,26 @@ nextKey8:
 shiftOn:
 	; check keys that would be operators if shift is pressed (shift and = is +, shift and 8 is *, shift 5 is %)
 	cmp		byte [currentKey], 0x0D ; =, i.e. +
-	jne		nextShiftKey1
+	jne		checkShiftKey_8
 	mov		al, '+'
 	call	_addToRPNString
 	jmp		yield_Main
-nextShiftKey1:
+checkShiftKey_8:
 	cmp		byte [currentKey], 0x09 ; 8, i.e. *
-	jne		nextShiftKey2
+	jne		checkShiftKey_5
 	mov		al, '*'
 	call	_addToRPNString
 	jmp		yield_Main
-nextShiftKey2:
+checkShiftKey_5:
 	cmp		byte [currentKey], 0x06 ; 5, i.e. %
-	jne		doneShiftKey
+	jne		checkShiftKey_backtick
 	mov		al, '%'
+	call	_addToRPNString
+	jmp		yield_Main
+checkShiftKey_backtick:
+	cmp		byte [currentKey], 0x29 ; `, i.e. ~
+	jne		doneShiftKey
+	mov		al, '~'
 	call	_addToRPNString
 doneShiftKey:
 	; no more keys to check with shift on
@@ -706,103 +863,97 @@ doneShiftKey:
 shiftOff:
 	; check for operators without shift
 	cmp		byte [currentKey], 0x0C ; -
-	jne		nextKey9
+	jne		checkKey_slash
 	mov		al, '-'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey9:
-	cmp		byte [currentKey], 0x4A ; numpad -
-	jne		nextKey10
-	mov		al, '-'
-	call	_addToRPNString
-	jmp		yield_Main
-nextKey10:
+checkKey_slash:
 	cmp		byte [currentKey], 0x35 ; /
-	jne		nextKey11
+	jne		checkKey_numpadPlus
 	mov		al, '/'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey11:
+checkKey_numpadPlus:
 	cmp		byte [currentKey], 0x4E ; numpad +
-	jne		nextKey12
+	jne		checkKey_numpadMinus
 	mov		al, '+'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey12:
+checkKey_numpadMinus:
 	cmp		byte [currentKey], 0x4A ; numpad -
-	jne		nextKey13
+	jne		checkKey_numpadStar
 	mov		al, '-'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey13:
+checkKey_numpadStar:
 	cmp		byte [currentKey], 0x37 ; numpad *
-	jne		nextKey14
+	jne		checkKey_numpad0
 	mov		al, '*'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey14:
+checkKey_numpad0:
 	; check for numbers
 	; numpad numbers don't follow a pattern, so check those first
 	cmp		byte [currentKey], 0x52 ; numpad 0
-	jne		nextKey15
+	jne		checkKey_numpad1
 	mov		al, '0'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey15:
+checkKey_numpad1:
 	cmp		byte [currentKey], 0x4F ; numpad 1
-	jne		nextKey16
+	jne		checkKey_numpad2
 	mov		al, '1'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey16:
+checkKey_numpad2:
 	cmp		byte [currentKey], 0x50 ; numpad 2
-	jne		nextKey17
+	jne		checkKey_numpad3
 	mov		al, '2'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey17:
+checkKey_numpad3:
 	cmp		byte [currentKey], 0x51 ; numpad 3
-	jne		nextKey18
+	jne		checkKey_numpad4
 	mov		al, '3'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey18:
+checkKey_numpad4:
 	cmp		byte [currentKey], 0x4B ; numpad 4
-	jne		nextKey19
+	jne		checkKey_numpad5
 	mov		al, '4'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey19:
+checkKey_numpad5:
 	cmp		byte [currentKey], 0x4C ; numpad 5
-	jne		nextKey20
+	jne		checkKey_numpad6
 	mov		al, '5'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey20:
+checkKey_numpad6:
 	cmp		byte [currentKey], 0x4D ; numpad 6
-	jne		nextKey21
+	jne		checkKey_numpad7
 	mov		al, '6'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey21:
+checkKey_numpad7:
 	cmp		byte [currentKey], 0x47 ; numpad 7
-	jne		nextKey22
+	jne		checkKey_numpad8
 	mov		al, '7'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey22:
+checkKey_numpad8:
 	cmp		byte [currentKey], 0x48 ; numpad 8
-	jne		nextKey23
+	jne		checkKey_numpad9
 	mov		al, '8'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey23:
+checkKey_numpad9:
 	cmp		byte [currentKey], 0x49 ; numpad 9
-	jne		nextKey24
+	jne		checkKey_numbers
 	mov		al, '9'
 	call	_addToRPNString
 	jmp		yield_Main
-nextKey24:
+checkKey_numbers:
 	; check non-numpad numbers (these follow a pattern)
 	; numbers run from 0x02 to 0x0B, so we can check the range and get char by its difference from 0x02
 	cmp		byte [currentKey], 0x02
@@ -873,8 +1024,17 @@ SECTION .data
 	taskB_dir: db 0
 	
 	; RPN calculator
-	rpn_string: times 55 db 0 ; max length: 54
+	rpn_string: times 54 db " " ; max length: 54
+				db 0
 	rpn_strPointer: dw 0 ; initialized to 0
+	rpn_stack: times 16 dw 0
+	rpn_top: dw 0
+	rpn_curNum: dw 0
+	rpn_enteringNum: db 0 ; bool variable to track if last input was a number
+	rpn_evaluate: db 0
+	rpn_underflowStr: db "Stack underflow!                                      ", 0
+	rpn_overflowStr: db "Stack overflow!                                       ", 0
+	rpn_div0Str: db "Divide by 0!                                          ", 0
 	
 	; custom keyboard interrupt
 	;	current key scan code
