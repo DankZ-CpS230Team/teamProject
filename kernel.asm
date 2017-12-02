@@ -569,9 +569,15 @@ rpn_doEvaluate:
 		mov		ax, rpn_underflowStr
 		jmp		rpn_error
 	rpn_popAnsOK:
-		; TODO: go digit-by-digit and convert decimal number to string, then print
+		; go digit-by-digit and convert decimal number to string, then print
+		; clear old result string from '=' to end
+		push	ax
+		mov		ax, rpn_resultStr
+		add		ax, 4
+		call	_clearString
+		pop		ax
 		mov		si, rpn_resultStr
-		add		si, 5 ; gets us past the '='
+		add		si, 4 ; gets us past the '='
 		mov		cx, ax ; to protect the answer, since idiv messes with AX
 		; we'll divide by BX to get digits
 		; largest number of digits that can fit in 16 bits is 5
@@ -579,8 +585,9 @@ rpn_doEvaluate:
 		mov		bx, 10000
 		cmp		cx, 0
 		jge		rpn_decimalToString
-		; negative answer, print '-' sign
+		; negative answer, print '-' sign and do 2's complement conversion on AX
 		mov		byte [si], '-'
+		neg		cx
 		inc		si
 	rpn_decimalToString:
 		cmp		bx, 0
@@ -773,14 +780,14 @@ _clearRPNString:
 	push	si
 	mov		si, rpn_string
 	add		si, [rpn_strPointer]
-clearLoop:
+clrrpn_clearLoop:
 	cmp		si, rpn_string
-	jne		clearChar
+	jne		clrrpn_clearChar
 	jmp		end_clearRPNString
-clearChar:
+clrrpn_clearChar:
 	dec		si
 	mov		byte [si], " "
-	jmp		clearLoop
+	jmp		clrrpn_clearLoop
 
 end_clearRPNString:
 	mov		byte [rpn_strPointer], 0
@@ -791,6 +798,25 @@ end_clearRPNString:
 	mov		dl, 0
 	int		0x10
 	
+	pop		si
+	ret
+
+; more general function than _clearRPNString
+; sets all characters of string pointed to by AX to spaces
+; clobbers nothing
+; returns nothing
+_clearString:
+	push	si
+	mov		si, ax
+clearLoop:
+	cmp		byte [si], 0 ; stop at NULL-terminator
+	jne		clearChar
+	jmp		end_clearString
+clearChar:
+	mov		byte [si], ' '
+	inc		si
+	jmp		clearLoop
+end_clearString:
 	pop		si
 	ret
 
