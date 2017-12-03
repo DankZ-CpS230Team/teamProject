@@ -610,7 +610,14 @@ rpn_doEvaluate:
 		mov		ax, rpn_div0Str
 		jmp		rpn_error
 	rpn_continueDivide:
+		; check sign of divisor--need to sign extend into DX if negative
+		cmp		ax, 0
+		jge		rpn_divPositive
+		mov		dx, 0xFFFF
+		jmp		rpn_divMovDXDone
+	rpn_divPositive:
 		mov		dx, 0
+	rpn_divMovDXDone:
 		idiv	bx
 		call	_rpn_push_value
 		cmp		dx, 1
@@ -643,6 +650,14 @@ rpn_doEvaluate:
 		mov		ax, rpn_div0Str
 		jmp		rpn_error
 	rpn_continueMod:
+		; check sign of divisor--need to sign extend into DX if negative
+		cmp		ax, 0
+		jge		rpn_modPositive
+		mov		dx, 0xFFFF
+		jmp		rpn_modMovDXDone
+	rpn_modPositive:
+		mov		dx, 0
+	rpn_modMovDXDone:
 		mov		dx, 0
 		idiv	bx
 		mov		ax, dx ; remainder stored in dx
@@ -691,6 +706,13 @@ rpn_doEvaluate:
 		pop		ax
 		mov		si, rpn_resultStr
 		add		si, 4 ; gets us past the '='
+		; first, check if answer is 0 (edge case)
+		; just put in string and break if so
+		cmp		ax, 0
+		jne		rpn_ansNonzero
+		mov		byte [si], '0'
+		jmp		rpn_conversionDone
+	rpn_ansNonzero:
 		mov		cx, ax ; to protect the answer, since idiv messes with AX
 		; we'll divide by BX to get digits
 		; largest number of digits that can fit in 16 bits is 5
