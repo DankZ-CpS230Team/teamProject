@@ -1011,6 +1011,7 @@ SECTION .data
 	; Game of Life strings
 	gameOfLife_header:	db "   John Conway's                                                                ", 13, 10
 						db "   Game of Life                              Graphics                           ", 0
+	; grid with a 'glider'
 	gameOfLife_grid1: db ' *                    *                 ***                                                                                                                                                             '
 	gameOfLife_grid2: db '                                                                                                                                                                                                        '
 	
