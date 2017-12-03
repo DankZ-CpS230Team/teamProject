@@ -45,9 +45,9 @@ read_error:
 	mov		dx, retry_msg
 	call	puts
 read_disk:
-	; use BIOS raw disk I/O to load 9 sectors (starting at 2) from disk number <boot_disk> into memory at 0800:0000h (retry on failure)
+	; use BIOS raw disk I/O to load 11 sectors (starting at 2) from disk number <boot_disk> into memory at 0800:0000h (retry on failure)
 	mov		ah, 0x2
-	mov		al, 9
+	mov		al, 11
 	mov		ch, 0
 	mov		cl, 2
 	mov		dh, 0
