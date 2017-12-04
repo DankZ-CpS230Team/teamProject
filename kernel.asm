@@ -34,6 +34,8 @@ start:
 	call	_spawn_new_task
 	mov		dx, _taskB
 	call	_spawn_new_task
+	mov		dx, _ballTask
+	call	_spawn_new_task
 	mov		dx, _rpnCalculator
 	call	_spawn_new_task
 	mov		dx, _gameOfLife
@@ -237,6 +239,71 @@ print_B:
 	call	_printString
 	call	_yield
 	jmp		jumpB_begin
+
+; Prints 1-char size "ball" that bounces off window sides
+_ballTask:
+	mov		bl, 100
+	mov		bh, 32
+jumpBall_begin:
+	; print ball with black background to effectively erase
+	mov		cl, 0 ; black background
+	mov		ch, 0 ; black foreground
+	mov		dl, " " ; ball char
+	mov		dh, 0 ; no blink
+	call	_printChar
+	sub		bl, 2 ; printChar increments BL, sub to avoid confusion
+		
+	; increment column for this print
+	cmp		bl, 160 - 2 ; 22 is length of string
+	jae		changeDirX_ball
+	cmp		bl, 42
+	jbe		changeDirX_ball
+	cmp		byte [ball_dirX], 1 ; check direction flag
+	je		moveRight_ball
+; move left
+	sub		bl, 2
+	jmp		ball_changeRow
+moveRight_ball:
+	add		bl, 2
+	jmp		ball_changeRow
+changeDirX_ball:
+	mov		al, 4 ; these next 4 lines evaluate to bh -= ((dir == 1) ? 2 : -2)
+	imul	byte [ball_dirX]
+	add		al, -2
+	sub		bl, al
+	xor		byte [ball_dirX], 1 ; flip direction flag
+	
+ball_changeRow:
+	; increment row for this print
+	cmp		bh, 50 - 2 ; 22 is length of string
+	jae		changeDirY_ball
+	cmp		bh, 30
+	jbe		changeDirY_ball
+	cmp		byte [ball_dirY], 1 ; check direction flag
+	je		moveUp_ball
+; move down
+	sub		bh, 2
+	jmp		printBall
+moveUp_ball:
+	add		bh, 2
+	jmp		printBall
+changeDirY_ball:
+	mov		al, 4 ; these next 4 lines evaluate to bh -= ((dir == 1) ? 2 : -2)
+	imul	byte [ball_dirY]
+	add		al, -2
+	sub		bh, al
+	xor		byte [ball_dirY], 1 ; flip direction flag
+
+printBall:
+	; print ball in green
+	mov		cl, 2 ; green background
+	mov		ch, 0 ; black foreground
+	mov		dl, " " ; ball char
+	mov		dh, 0 ; no blink
+	call	_printChar
+	sub		bl, 2 ; printChar increments BL, sub to avoid confusion
+	call	_yield
+	jmp		jumpBall_begin
 	
 ; task that prints a 20x10 version of Conway's Game of Life
 _gameOfLife:
