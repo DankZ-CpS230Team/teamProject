@@ -71,7 +71,7 @@ sp_loop_for_available_stack:
 	jne sp_check_for_overflow
 	jmp sp_no_available_stack
 sp_check_for_overflow:
-	cmp cl, 6
+	cmp cl, 7
 	jg sp_reset
 	jmp sp_check_if_available
 sp_reset:
@@ -125,7 +125,7 @@ _yield:
 	mov cl, [current_task]
 	inc cl
 y_check_for_overflow:
-	cmp cl, 6
+	cmp cl, 7
 	jg y_reset
 	jmp y_check_if_enabled
 y_reset:
@@ -156,15 +156,15 @@ y_task_available:
 _taskA:
 	mov		bl, 44
 jumpA_begin:
-	; print "Task A" in light blue
+	; print the string with black foreground to effectively erase
 	mov		bh, 34
 	mov		cl, 0 ; black background
-	mov		ch, 9 ; light blue foreground
+	mov		ch, 0 ; black foreground
 	mov		ax, taskA_str ; pointer to string
 	mov		dh, 0 ; no blink
 	call	_printString
 		
-	; increment column for next print and yield
+	; increment column for this print
 	cmp		bl, 160 - 22 ; 22 is length of string
 	jae		changeDir_A
 	cmp		bl, 42
@@ -173,18 +173,25 @@ jumpA_begin:
 	je		moveRight_A
 ; move left
 	sub		bl, 2
-	jmp		yield_A
+	jmp		print_A
 moveRight_A:
 	add		bl, 2
-	jmp		yield_A
+	jmp		print_A
 changeDir_A:
 	mov		al, 4 ; these next 4 lines evaluate to bh -= ((dir == 1) ? 2 : -2)
 	imul	byte [taskA_dir]
 	add		al, -2
 	sub		bl, al
 	xor		byte [taskA_dir], 1 ; flip direction flag
-	
-yield_A:
+
+print_A:
+	; print "Task A" in light blue
+	mov		bh, 34
+	mov		cl, 0 ; black background
+	mov		ch, 9 ; light blue foreground
+	mov		ax, taskA_str ; pointer to string
+	mov		dh, 0 ; no blink
+	call	_printString
 	call	_yield
 	jmp		jumpA_begin
 
@@ -192,16 +199,15 @@ yield_A:
 _taskB:
 	mov		bl, 160 - 12 - 2 ; 12 is length of string's longest line
 jumpB_begin:
-	; print "Task B" in light purple
+	; print the string with black foreground to effectively erase
 	mov		bh, 40
 	mov		cl, 0 ; black background
-	mov		ch, 0xd ; light purple foreground
+	mov		ch, 0 ; black foreground
 	mov		ax, taskB_str ; pointer to string
 	mov		dh, 0 ; no blink
 	call	_printString
-	mov		ah, 0x2c
 	
-	; increment column for next print and yield
+	; increment column this print
 	cmp		bl, 160 - 12 ; again, 12 is length of string's longest line
 	jae		changeDir_B
 	cmp		bl, 42
@@ -210,10 +216,10 @@ jumpB_begin:
 	je		moveRight_B
 ; move left
 	sub		bl, 2
-	jmp		yield_B
+	jmp		print_B
 moveRight_B:
 	add		bl, 2
-	jmp		yield_B
+	jmp		print_B
 changeDir_B:
 	mov		al, 4 ; these next 4 lines evaluate to bh -= ((dir == 1) ? -2 : 2)
 	imul	byte [taskB_dir]
@@ -221,12 +227,18 @@ changeDir_B:
 	sub		bl, al
 	xor		byte [taskB_dir], 1 ; flip direction flag
 	
-yield_B:
+print_B:
+	; print "Task B" in light purple
+	mov		bh, 40
+	mov		cl, 0 ; black background
+	mov		ch, 0xd ; light purple foreground
+	mov		ax, taskB_str ; pointer to string
+	mov		dh, 0 ; no blink
+	call	_printString
 	call	_yield
 	jmp		jumpB_begin
 	
 ; task that prints a 20x10 version of Conway's Game of Life
-	
 _gameOfLife:
 	push 	ax
 	push	bx
@@ -1412,6 +1424,10 @@ SECTION .data
 	taskA_dir: db 1
 	taskB_dir: db 0
 	
+	; ball graphics
+	ball_dirX: db 1
+	ball_dirY: db 0
+	
 	; RPN calculator
 	rpn_string: times 54 db " " ; max length: 54
 				db 0
@@ -1438,8 +1454,8 @@ SECTION .data
 
 	; global variables for stacks
 	current_task: db 0
-	stacks: times (256 * 6) db 0 ; 6 fake stacks of size 256 bytes
-	task_status: times 6 db 0 ; 0 means inactive, 1 means active
+	stacks: times (256 * 7) db 0 ; 6 fake stacks of size 256 bytes
+	task_status: times 7 db 0 ; 0 means inactive, 1 means active
 	stack_pointers: dw 0 ; the first pointer needs to be to the real stack !
 					dw stacks + (256 * 1)
 					dw stacks + (256 * 2)
