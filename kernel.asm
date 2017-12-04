@@ -1361,6 +1361,8 @@ checkKey_numpadStar:
 checkKey_numpad0:
 	; check for numbers
 	; numpad numbers don't follow a pattern, so check those first
+	cmp		byte [E0_on], 1
+	je		checkKey_numbers ; skip all the number pad if 0xE0 code is present (don't interpret arrow keys as numbers)
 	cmp		byte [currentKey], 0x52 ; numpad 0
 	jne		checkKey_numpad1
 	mov		al, '0'
@@ -1440,6 +1442,7 @@ notZero:
 
 yield_Main:
 	mov		byte [currentKey], 0
+	mov		byte [E0_on], 0 ; turn off 0xE0 flag
 	call	_yield
 	; pause after drawing updates
 	mov		ah, 0x86
@@ -1461,6 +1464,10 @@ exit_program:
 keyboard:
 	push	ax
 	in		al, 0x60
+	cmp		al, 0xE0 ; 0xE0 make code?
+	jne		noE0
+	mov		byte [E0_on], 1
+noE0:
 	mov		byte [currentKey], al
 	mov		al, 0x20
 	out		0x20, al
@@ -1516,6 +1523,8 @@ SECTION .data
 	currentKey: db 0
 	;	shift pressed boolean
 	shift: db 0
+	;	boolean flagging if 0xE0 make code is currently modifying <currentKey>
+	E0_on: db 0
 	;	address of previous 0x09 interrupt
 	previous9: dd 0
 
