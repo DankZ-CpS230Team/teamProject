@@ -3,7 +3,7 @@
 
 bits 16
 
-org 0x100 ; change to 0x100 when running as COM file, change to 0x0 when booting with bootloader
+org 0x0 ; change to 0x100 when running as COM file, change to 0x0 when booting with bootloader
 
 SECTION .text
 
@@ -11,7 +11,8 @@ start:
 	mov		dx, cs
 	mov		ds, dx
 	
-	; set up custom keyboard hardware interrupt
+	; set up custom hardware interrupts
+	; starting with the keyboard
 	cli
 	mov		ax, 0
 	mov		es, ax
@@ -25,6 +26,20 @@ start:
 	mov		[es:0x9*4], dx
 	mov		ax, cs 
 	mov		[es:0x9*4+2], ax
+	
+	; then the timer
+	mov		ax, 0
+	mov		es, ax
+
+	mov		dx, [es:0x8*4]
+	mov		[previous8], dx
+	mov		ax, [es:0x8*4+2]
+	mov		[previous8+2], ax
+
+	mov		dx, timer
+	mov		[es:0x8*4], dx
+	mov		ax, cs 
+	mov		[es:0x8*4+2], ax
 	sti
 	
 	; spawn tasks
@@ -40,16 +55,30 @@ start:
 	call	_spawn_new_task
 	mov		dx, _gameOfLife
 	call 	_spawn_new_task
+	mov		dx, _task_Music
+	call 	_spawn_new_task
 	jmp		_main
 	
 terminate:
-	; restore old keyboard hardware interrupt
+	; restore old hardware interrupts
+	; starting with the keyboard
 	mov		ax, 0
 	mov		es, ax
 	mov		dx, [previous9]
 	mov		[es:0x9*4], dx
 	mov		ax, [previous9 + 2]
 	mov		[es:0x9*4+2], ax
+	
+	; then the timer
+	mov		ax, 0
+	mov		es, ax
+	mov		dx, [previous8]
+	mov		[es:0x8*4], dx
+	mov		ax, [previous8 + 2]
+	mov		[es:0x8*4+2], ax
+	
+	; stop the current note that's playing
+	call 	_stopNote
 	
 	mov		ah, 0x4c
 	mov		al, 0
@@ -153,6 +182,70 @@ y_task_available:
 	; pop registers
 	popa
 	ret
+	
+; Plays a song with interrupts
+_task_Music:
+	push 	ax
+	push	bx
+	push	cx
+	
+	mov 	ax, [isNotePlaying]
+	cmp		ax, 0
+	je		_not_playing
+	jmp		_yield_music
+_not_playing:
+	mov		bx, [note_pointer]
+	mov		cx, 0
+	mov		cl, byte [song_notes_duration + bx]
+	add		bx, bx
+	mov		al, byte [song_notes_pitch + bx]
+	inc		bx
+	mov		ah, byte [song_notes_pitch + bx]
+	mov		bx, ax
+	mov		ax, word [note_pointer]
+	inc		ax
+	cmp		ax, 4
+	jl		_skip
+	mov		ax, 0
+_skip:
+	mov		word [note_pointer], ax
+	call 	_playNote
+_yield_music:
+	pop		cx
+	pop 	bx
+	pop		ax
+	call 	_yield
+	jmp 	_task_Music
+
+; Plays a note through the computer speaker
+; note is stored in bx
+; duration is stored in cx
+_playNote:
+	push	ax
+	mov 	word [isNotePlaying], 1
+	mov     al, 182         ; Prepare the speaker for the
+    out     43h, al         ;  note.
+    mov     ax, bx          ; Frequency number
+	mov		[noteDuration], cx	; Duration of the note
+    out     42h, al         ; Output low byte.
+    mov     al, ah          ; Output high byte.
+    out     42h, al 
+    in      al, 61h         ; Turn on note (get value from port 61h).
+    or      al, 00000011b   ; Set bits 1 and 0.
+    out     61h, al 
+	pop		ax
+	ret
+
+; Stops the computer speaker
+_stopNote:
+	push 	ax
+	mov		word [isNotePlaying], 0
+	in      al, 61h         ; Turn on note (get value from port 61h).
+    and     al, 11111100b   ; Set bits 1 and 0.
+    out     61h, al
+	pop		ax
+	ret
+	
 
 ; Prints "Task A" to screen
 _taskA:
@@ -268,7 +361,7 @@ moveRight_ball:
 	jmp		ball_changeRow
 changeDirX_ball:
 	mov		al, 4 ; these next 4 lines evaluate to bh -= ((dir == 1) ? 2 : -2)
-	imul	byte [ball_dirX]
+	imul	byte [ball_dirX] 
 	add		al, -2
 	sub		bl, al
 	xor		byte [ball_dirX], 1 ; flip direction flag
@@ -1234,6 +1327,13 @@ _main:
 	mov		ax, gameOfLife_rightBorder
 	call	_printString
 	
+	mov		bl, 110
+	mov		bh, 8
+	mov		cl, 0
+	mov		ch, 7
+	mov		ax, music_ascii_art
+	call 	_printString
+	
 	; set cursor position to _rpnCalculator window
 	mov		ah, 0x02
 	mov		bh, 0
@@ -1459,6 +1559,26 @@ exit_program:
 	mov		al, 0x3
 	int		0x10
 	jmp		terminate
+
+; custom timer hardware interrupt
+timer:	
+	push	ax
+	
+	mov		ax, word [isNotePlaying]
+	cmp		ax, 0
+	jne 	_notePlaying
+	jmp		_return_timer
+_notePlaying:
+	mov		ax, [noteDuration]
+	dec 	ax
+	mov		[noteDuration], ax
+	cmp 	ax, 0
+	jne 	_return_timer
+	call 	_stopNote
+_return_timer:
+	pop		ax
+	; jump to the original INT 8 handler 
+	jmp	far [cs:previous8]	; Use CS as the segment here, since who knows what DS is now
 	
 ; custom keyboard hardware interrupt
 keyboard:
@@ -1516,7 +1636,17 @@ SECTION .data
 	rpn_resultStr: db "  =                                                   ", 0
 	rpn_underflowStr: db "  Stack underflow!                                    ", 0
 	rpn_overflowStr: db "  Stack overflow!                                     ", 0
-	rpn_div0Str: db "  Divide by 0!                                        ", 0
+	rpn_div0Str: db "  Divide by 0!     	", 0
+	
+	; music task
+	; ascii art taken from https://www.ascii-code.com/ascii-art/music/musical-notation.php
+	music_ascii_art: db "          |\\            ", 13, 10, "----|\----|-\\--- |\\----", 13, 10, "----|/---0---\|---|-\\---", 13, 10, "---/|---------|--0---\|--", 13, 10, "--|-/-\------0--------|--", 13, 10, "---\|/---------------0---", 13, 10, "    d", 0
+	isNotePlaying: db 0
+	noteDuration: dd 0
+	song_notes_pitch: dd 4560, 2280, 4560, 2280
+	song_notes_duration: db 50, 20, 50, 100
+	note_pointer: dd 0
+	
 	
 	; custom keyboard interrupt
 	;	current key scan code
@@ -1525,13 +1655,16 @@ SECTION .data
 	shift: db 0
 	;	boolean flagging if 0xE0 make code is currently modifying <currentKey>
 	E0_on: db 0
+	
 	;	address of previous 0x09 interrupt
 	previous9: dd 0
+	;	address of previous 0x08 interrupt
+	previous8: dd 0
 
 	; global variables for stacks
 	current_task: db 0
-	stacks: times (256 * 7) db 0 ; 6 fake stacks of size 256 bytes
-	task_status: times 7 db 0 ; 0 means inactive, 1 means active
+	stacks: times (256 * 8) db 0 ; 8 fake stacks of size 256 bytes
+	task_status: times 8 db 0 ; 0 means inactive, 1 means active
 	stack_pointers: dw 0 ; the first pointer needs to be to the real stack !
 					dw stacks + (256 * 1)
 					dw stacks + (256 * 2)
@@ -1540,3 +1673,4 @@ SECTION .data
 					dw stacks + (256 * 5)
 					dw stacks + (256 * 6)
 					dw stacks + (256 * 7)
+					dw stacks + (256 * 8)
