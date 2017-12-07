@@ -204,7 +204,7 @@ _not_playing:
 	mov		bx, ax
 	mov		ax, word [note_pointer]
 	inc		ax
-	cmp		ax, 4
+	cmp		ax, 42
 	jl		_skip
 	mov		ax, 0
 _skip:
@@ -223,6 +223,12 @@ _yield_music:
 _playNote:
 	push	ax
 	mov 	word [isNotePlaying], 1
+	cmp		bx, 0
+	jne 	_notWait
+	mov		[noteDuration], cx	; Duration of the rest
+	pop		ax
+	ret
+_notWait:
 	mov     al, 182         ; Prepare the speaker for the
     out     43h, al         ;  note.
     mov     ax, bx          ; Frequency number
@@ -1643,8 +1649,8 @@ SECTION .data
 	music_ascii_art: db "          |\\            ", 13, 10, "----|\----|-\\--- |\\----", 13, 10, "----|/---0---\|---|-\\---", 13, 10, "---/|---------|--0---\|--", 13, 10, "--|-/-\------0--------|--", 13, 10, "---\|/---------------0---", 13, 10, "    d", 0
 	isNotePlaying: db 0
 	noteDuration: dd 0
-	song_notes_pitch: dd 4560, 2280, 4560, 2280
-	song_notes_duration: db 50, 20, 50, 100
+	song_notes_pitch: dw 4063, 3619, 3416, 2711, 3619, 2031, 2280, 2415, 3416, 2711, 2415, 2280, 2031, 2711, 4063, 3043, 3416, 4063, 5423, 0, 4831, 4560, 4063, 3043, 3416, 3043, 2711, 3416, 3619, 3416, 3043, 3619, 4831, 3043, 3416, 5423, 3619, 4560, 4063, 5423, 3619, 4063
+	song_notes_duration: db 9, 9, 9, 9, 35, 9, 9, 9, 9, 35, 9, 9, 9, 17, 17, 9, 9, 9, 17, 17, 17, 17, 17, 17, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 17, 17, 17, 9, 9, 35
 	note_pointer: dd 0
 	
 	
