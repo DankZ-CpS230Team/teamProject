@@ -1,6 +1,6 @@
 Bugs:
-	- Tasks don't erase themselves when they move or delete characters.
+	Who cares.
 	
 Time spent:
-	Zachary Hayes: 19.80 hrs.
-	Ryan Longacre: 14.5 hrs.
+	Zachary Hayes: 20.00 hrs.
+	Ryan Longacre: 19.30 hrs.
